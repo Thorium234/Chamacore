@@ -1,0 +1,1146 @@
+ChamaCore Database Specification
+
+«This document defines the database structure, field names, relationships, constraints, and identifier rules for ChamaCore.
+
+Database: PostgreSQL
+ORM: SQLAlchemy
+Migrations: Alembic»
+
+---
+
+1. Database Design Principles
+
+1. PostgreSQL is the source of truth.
+2. Every table must have a primary key.
+3. Internal database IDs should use UUIDs.
+4. Human-readable identifiers may be generated separately.
+5. Money must use "NUMERIC", never floating-point types.
+6. Financial records must be traceable.
+7. Important business rules should be enforced with database constraints where possible.
+8. Foreign keys must be used for relationships.
+9. Database schema changes must be made through Alembic migrations.
+10. Financial records should not be physically deleted after becoming part of the financial history.
+
+---
+
+2. Identifier Strategy
+
+ChamaCore uses two types of identifiers.
+
+2.1 Internal ID
+
+Every major entity has an internal UUID:
+
+id = UUID
+
+Example:
+
+550e8400-e29b-41d4-a716-446655440000
+
+This is used internally for:
+
+- Foreign keys
+- API references
+- Database relationships
+- Internal processing
+
+---
+
+2.2 Human-Readable Member Number
+
+Members receive a system-generated member number.
+
+Example:
+
+NUCSA001
+NUCSA002
+NUCSA003
+
+The member does not enter this number during registration.
+
+The system generates it after the membership is created.
+
+Example
+
+Member registers:
+
+Full Name: John Kamau
+Phone Number: 0712345678
+ID Number: 12345678
+
+The system creates:
+
+Member ID:
+550e8400-e29b-41d4-a716-446655440000
+
+Member Number:
+NUCSA001
+
+The human-readable member number must be unique within the Chama.
+
+---
+
+3. Member Number Format
+
+The recommended structure is:
+
+<CHAMA_CODE><SEQUENCE>
+
+Example:
+
+NUCSA001
+NUCSA002
+NUCSA003
+
+Where:
+
+NUCSA = Chama code
+001   = sequential member number
+
+Another Chama could have:
+
+KIKAI001
+KIKAI002
+KIKAI003
+
+The system must not rely on the member number as the database primary key.
+
+---
+
+4. Chama Table
+
+Table
+
+chamas
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Internal Chama identifier
+"name"| VARCHAR(150)| NOT NULL| Chama name
+"code"| VARCHAR(20)| NOT NULL, UNIQUE| Human-readable Chama code
+"description"| TEXT| NULL| Chama description
+"registration_fee"| NUMERIC(14,2)| NOT NULL| Default registration fee
+"currency"| CHAR(3)| NOT NULL| Currency, e.g. KES
+"status"| VARCHAR(20)| NOT NULL| Chama status
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+"updated_at"| TIMESTAMPTZ| NOT NULL| Last update timestamp
+
+Example
+
+id:  UUID
+name: NUC Students Welfare Chama
+code: NUCSA
+currency: KES
+status: ACTIVE
+
+---
+
+5. Users Table
+
+A user represents an authenticated person using the system.
+
+Table
+
+users
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| User identifier
+"phone_number"| VARCHAR(20)| UNIQUE, NOT NULL| Login/contact phone
+"email"| VARCHAR(255)| UNIQUE, NULL| Email address
+"password_hash"| TEXT| NOT NULL| Hashed password
+"is_active"| BOOLEAN| NOT NULL| Account status
+"last_login_at"| TIMESTAMPTZ| NULL| Last login
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+"updated_at"| TIMESTAMPTZ| NOT NULL| Last update timestamp
+
+Passwords must never be stored as plain text.
+
+---
+
+6. Members Table
+
+The "members" table contains the person's identity information.
+
+Table
+
+members
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Internal member ID
+"user_id"| UUID| FK → users.id, NULL| Linked login account
+"full_name"| VARCHAR(200)| NOT NULL| Member's full name
+"phone_number"| VARCHAR(20)| NOT NULL| Member phone number
+"id_number"| VARCHAR(50)| NOT NULL| Government ID/passport number
+"member_number"| VARCHAR(30)| UNIQUE, NOT NULL| System-generated member number
+"status"| VARCHAR(30)| NOT NULL| Member status
+"registered_at"| TIMESTAMPTZ| NOT NULL| Registration date
+"created_at"| TIMESTAMPTZ| NOT NULL| Record creation
+"updated_at"| TIMESTAMPTZ| NOT NULL| Last update
+
+Example
+
+id:
+550e8400-e29b-41d4-a716-446655440000
+
+full_name:
+John Kamau
+
+phone_number:
+0712345678
+
+id_number:
+12345678
+
+member_number:
+NUCSA001
+
+status:
+ACTIVE
+
+---
+
+7. Member Number Generation
+
+Member registration should follow this process:
+
+Member submits registration
+          │
+          ▼
+Validate input
+          │
+          ▼
+Check duplicate ID number
+          │
+          ▼
+Check duplicate phone number
+          │
+          ▼
+Create member
+          │
+          ▼
+Generate member number
+          │
+          ▼
+NUCSA001
+
+The member number must be generated server-side.
+
+The frontend must never be trusted to generate:
+
+NUCSA001
+
+---
+
+8. Memberships Table
+
+A member can belong to a Chama through a membership record.
+
+This is important because a person and their membership in a specific Chama are different concepts.
+
+Table
+
+memberships
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Membership ID
+"member_id"| UUID| FK → members.id| Member
+"chama_id"| UUID| FK → chamas.id| Chama
+"membership_number"| VARCHAR(30)| UNIQUE| Chama membership identifier
+"joined_at"| TIMESTAMPTZ| NOT NULL| Date joined
+"status"| VARCHAR(30)| NOT NULL| Membership status
+"registration_fee"| NUMERIC(14,2)| NOT NULL| Registration fee applicable
+"registration_fee_status"| VARCHAR(30)| NOT NULL| Payment status
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+"updated_at"| TIMESTAMPTZ| NOT NULL| Last update
+
+Important
+
+The "members" table identifies the person.
+
+The "memberships" table identifies their relationship with a particular Chama.
+
+Member
+   │
+   └── Membership
+           │
+           └── Chama
+
+---
+
+9. Roles Table
+
+Table
+
+roles
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Role ID
+"chama_id"| UUID| FK → chamas.id| Chama
+"name"| VARCHAR(50)| NOT NULL| Role name
+"description"| TEXT| NULL| Role description
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+
+Examples:
+
+CHAIRPERSON
+TREASURER
+SECRETARY
+MEMBER
+
+---
+
+10. Membership Roles Table
+
+A membership may have one or more roles depending on the authorization design.
+
+Table
+
+membership_roles
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Record ID
+"membership_id"| UUID| FK → memberships.id| Membership
+"role_id"| UUID| FK → roles.id| Assigned role
+"assigned_at"| TIMESTAMPTZ| NOT NULL| Assignment timestamp
+"assigned_by"| UUID| FK → users.id| User who assigned role
+
+---
+
+11. Contributions Table
+
+A contribution represents the amount a member is expected or recorded to contribute.
+
+Table
+
+contributions
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Contribution ID
+"membership_id"| UUID| FK → memberships.id| Member making contribution
+"amount"| NUMERIC(14,2)| NOT NULL| Contribution amount
+"currency"| CHAR(3)| NOT NULL| Currency
+"contribution_date"| DATE| NOT NULL| Contribution date
+"period"| VARCHAR(30)| NULL| Contribution period
+"status"| VARCHAR(30)| NOT NULL| Contribution status
+"notes"| TEXT| NULL| Additional information
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+"updated_at"| TIMESTAMPTZ| NOT NULL| Last update
+
+Example:
+
+member_number: NUCSA001
+amount: 1000.00
+currency: KES
+status: CONFIRMED
+
+---
+
+12. Shares Table
+
+Shares represent the member's ownership/contribution units according to the Chama's defined rules.
+
+Table
+
+shares
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Share record ID
+"membership_id"| UUID| FK → memberships.id| Member
+"quantity"| NUMERIC(14,4)| NOT NULL| Number of shares
+"value"| NUMERIC(14,2)| NOT NULL| Monetary value
+"source_contribution_id"| UUID| FK → contributions.id| Contribution that generated shares
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+
+The exact share calculation must come from the approved business rules.
+
+---
+
+13. Loans Table
+
+Table
+
+loans
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Loan ID
+"membership_id"| UUID| FK → memberships.id| Borrowing member
+"principal_amount"| NUMERIC(14,2)| NOT NULL| Original loan amount
+"interest_rate"| NUMERIC(8,4)| NOT NULL| Interest rate
+"term"| INTEGER| NOT NULL| Loan term
+"term_unit"| VARCHAR(20)| NOT NULL| DAYS/MONTHS/etc.
+"status"| VARCHAR(30)| NOT NULL| Loan status
+"approved_by"| UUID| FK → users.id| Approving user
+"approved_at"| TIMESTAMPTZ| NULL| Approval timestamp
+"disbursed_at"| TIMESTAMPTZ| NULL| Disbursement timestamp
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+"updated_at"| TIMESTAMPTZ| NOT NULL| Last update
+
+---
+
+14. Loan Repayments Table
+
+Table
+
+loan_repayments
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Repayment ID
+"loan_id"| UUID| FK → loans.id| Loan
+"amount"| NUMERIC(14,2)| NOT NULL| Repayment amount
+"principal_amount"| NUMERIC(14,2)| NOT NULL| Principal portion
+"interest_amount"| NUMERIC(14,2)| NOT NULL| Interest portion
+"payment_date"| TIMESTAMPTZ| NOT NULL| Repayment date
+"status"| VARCHAR(30)| NOT NULL| Repayment status
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+
+---
+
+15. Payouts Table
+
+Table
+
+payouts
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Payout ID
+"membership_id"| UUID| FK → memberships.id| Receiving member
+"amount"| NUMERIC(14,2)| NOT NULL| Payout amount
+"currency"| CHAR(3)| NOT NULL| Currency
+"reason"| VARCHAR(100)| NULL| Reason
+"status"| VARCHAR(30)| NOT NULL| Payout status
+"approved_by"| UUID| FK → users.id| Approving user
+"approved_at"| TIMESTAMPTZ| NULL| Approval time
+"paid_at"| TIMESTAMPTZ| NULL| Payment time
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+
+---
+
+16. Payments Table
+
+A payment represents an attempt to move money for a Chama business operation.
+
+Table
+
+payments
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Payment ID
+"chama_id"| UUID| FK → chamas.id| Chama
+"membership_id"| UUID| FK → memberships.id, NULL| Related member
+"contribution_id"| UUID| FK → contributions.id, NULL| Related contribution
+"loan_repayment_id"| UUID| FK → loan_repayments.id, NULL| Related repayment
+"payout_id"| UUID| FK → payouts.id, NULL| Related payout
+"amount"| NUMERIC(14,2)| NOT NULL| Payment amount
+"currency"| CHAR(3)| NOT NULL| Currency
+"provider"| VARCHAR(50)| NOT NULL| Payment provider
+"status"| VARCHAR(30)| NOT NULL| Payment status
+"reference"| VARCHAR(50)| UNIQUE| Internal payment reference
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+"updated_at"| TIMESTAMPTZ| NOT NULL| Last update
+
+---
+
+17. Payment Attempts Table
+
+A payment can have multiple attempts.
+
+Table
+
+payment_attempts
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Attempt ID
+"payment_id"| UUID| FK → payments.id| Payment
+"provider"| VARCHAR(50)| NOT NULL| Provider
+"attempt_number"| INTEGER| NOT NULL| Attempt sequence
+"status"| VARCHAR(30)| NOT NULL| Attempt status
+"requested_at"| TIMESTAMPTZ| NOT NULL| Request timestamp
+"completed_at"| TIMESTAMPTZ| NULL| Completion timestamp
+"failure_reason"| TEXT| NULL| Failure information
+
+---
+
+18. Provider Transactions Table
+
+This stores the external provider's transaction identity.
+
+Table
+
+provider_transactions
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Internal ID
+"payment_id"| UUID| FK → payments.id| Internal payment
+"provider"| VARCHAR(50)| NOT NULL| Provider
+"provider_transaction_id"| VARCHAR(150)| NOT NULL| External transaction ID
+"provider_reference"| VARCHAR(150)| NULL| External reference
+"amount"| NUMERIC(14,2)| NOT NULL| Provider amount
+"currency"| CHAR(3)| NOT NULL| Currency
+"status"| VARCHAR(30)| NOT NULL| Provider status
+"transaction_time"| TIMESTAMPTZ| NULL| Provider transaction time
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+
+Required constraint
+
+UNIQUE(provider, provider_transaction_id)
+
+This protects against duplicate provider callbacks or transaction processing.
+
+---
+
+19. Provider Callbacks Table
+
+Store incoming provider callbacks/webhooks for traceability.
+
+Table
+
+provider_callbacks
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Callback ID
+"provider"| VARCHAR(50)| NOT NULL| Provider
+"event_type"| VARCHAR(100)| NOT NULL| Callback type
+"provider_transaction_id"| VARCHAR(150)| NULL| External transaction
+"payload"| JSONB| NOT NULL| Original callback payload
+"signature_valid"| BOOLEAN| NOT NULL| Signature verification result
+"processed"| BOOLEAN| NOT NULL| Processing status
+"processed_at"| TIMESTAMPTZ| NULL| Processing timestamp
+"received_at"| TIMESTAMPTZ| NOT NULL| Received timestamp
+
+---
+
+20. Bank Accounts Table
+
+A Chama may have one or more bank accounts.
+
+Table
+
+bank_accounts
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Account ID
+"chama_id"| UUID| FK → chamas.id| Chama
+"provider"| VARCHAR(50)| NOT NULL| Banking provider
+"bank_name"| VARCHAR(100)| NOT NULL| Bank
+"account_number"| VARCHAR(100)| NOT NULL| Bank account number
+"account_name"| VARCHAR(200)| NOT NULL| Account holder/name
+"currency"| CHAR(3)| NOT NULL| Currency
+"status"| VARCHAR(30)| NOT NULL| Account status
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+"updated_at"| TIMESTAMPTZ| NOT NULL| Last update
+
+Account numbers should be protected appropriately and should not be unnecessarily exposed through APIs.
+
+---
+
+21. Bank Transactions Table
+
+A bank transaction represents a transaction reported by the bank/provider.
+
+Table
+
+bank_transactions
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Internal ID
+"bank_account_id"| UUID| FK → bank_accounts.id| Bank account
+"provider"| VARCHAR(50)| NOT NULL| Banking provider
+"provider_transaction_id"| VARCHAR(150)| NULL| Bank transaction ID
+"reference"| VARCHAR(150)| NULL| Bank reference
+"transaction_type"| VARCHAR(30)| NOT NULL| CREDIT/DEBIT
+"amount"| NUMERIC(14,2)| NOT NULL| Transaction amount
+"currency"| CHAR(3)| NOT NULL| Currency
+"description"| TEXT| NULL| Bank description
+"transaction_time"| TIMESTAMPTZ| NOT NULL| Transaction time
+"created_at"| TIMESTAMPTZ| NOT NULL| Imported timestamp
+
+---
+
+22. Reconciliation Records Table
+
+Reconciliation connects external transactions with internal financial records.
+
+Table
+
+reconciliation_records
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Reconciliation ID
+"chama_id"| UUID| FK → chamas.id| Chama
+"payment_id"| UUID| FK → payments.id, NULL| Internal payment
+"provider_transaction_id"| UUID| FK → provider_transactions.id, NULL| Provider transaction
+"bank_transaction_id"| UUID| FK → bank_transactions.id, NULL| Bank transaction
+"status"| VARCHAR(30)| NOT NULL| MATCHED/UNMATCHED/EXCEPTION
+"matched_amount"| NUMERIC(14,2)| NULL| Amount matched
+"reconciled_at"| TIMESTAMPTZ| NULL| Reconciliation time
+"reconciled_by"| UUID| FK → users.id, NULL| Person/system
+"notes"| TEXT| NULL| Reconciliation notes
+
+---
+
+23. Ledger Accounts Table
+
+Defines accounts used by the financial ledger.
+
+Table
+
+ledger_accounts
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Ledger account ID
+"chama_id"| UUID| FK → chamas.id| Chama
+"account_code"| VARCHAR(30)| NOT NULL| Account code
+"name"| VARCHAR(100)| NOT NULL| Account name
+"account_type"| VARCHAR(30)| NOT NULL| Account type
+"currency"| CHAR(3)| NOT NULL| Currency
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+
+Examples:
+
+1000 → Bank
+1100 → M-Pesa
+2000 → Member Contributions
+3000 → Loans Receivable
+4000 → Interest Income
+
+The final chart of accounts must be defined separately.
+
+---
+
+24. Ledger Entries Table
+
+Ledger entries represent the financial effect of a transaction.
+
+Table
+
+ledger_entries
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Ledger entry ID
+"chama_id"| UUID| FK → chamas.id| Chama
+"account_id"| UUID| FK → ledger_accounts.id| Ledger account
+"payment_id"| UUID| FK → payments.id, NULL| Related payment
+"debit"| NUMERIC(14,2)| NOT NULL| Debit amount
+"credit"| NUMERIC(14,2)| NOT NULL| Credit amount
+"currency"| CHAR(3)| NOT NULL| Currency
+"description"| TEXT| NULL| Entry description
+"entry_date"| TIMESTAMPTZ| NOT NULL| Entry timestamp
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+
+For a balanced accounting transaction:
+
+Total Debits = Total Credits
+
+---
+
+25. Audit Logs Table
+
+Important actions should be auditable.
+
+Table
+
+audit_logs
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Audit ID
+"user_id"| UUID| FK → users.id, NULL| User responsible
+"chama_id"| UUID| FK → chamas.id, NULL| Chama
+"action"| VARCHAR(100)| NOT NULL| Action performed
+"entity_type"| VARCHAR(100)| NOT NULL| Entity affected
+"entity_id"| UUID| NULL| Affected entity
+"old_values"| JSONB| NULL| Previous values
+"new_values"| JSONB| NULL| New values
+"ip_address"| INET| NULL| Source IP
+"created_at"| TIMESTAMPTZ| NOT NULL| Event timestamp
+
+---
+
+26. Notifications Table
+
+Table
+
+notifications
+
+Fields
+
+Field| Type| Constraints| Description
+"id"| UUID| PK| Notification ID
+"user_id"| UUID| FK → users.id| Recipient
+"type"| VARCHAR(50)| NOT NULL| Notification type
+"channel"| VARCHAR(30)| NOT NULL| SMS/EMAIL/PUSH
+"title"| VARCHAR(200)| NULL| Notification title
+"message"| TEXT| NOT NULL| Notification content
+"status"| VARCHAR(30)| NOT NULL| Notification status
+"sent_at"| TIMESTAMPTZ| NULL| Sent timestamp
+"created_at"| TIMESTAMPTZ| NOT NULL| Creation timestamp
+
+---
+
+27. Core Relationships
+
+The primary relationship structure is:
+
+Chama
+ │
+ ├── Memberships
+ │      │
+ │      └── Members
+ │             │
+ │             └── User
+ │
+ ├── Roles
+ │
+ ├── Contributions
+ │      │
+ │      └── Shares
+ │
+ ├── Loans
+ │      │
+ │      └── Loan Repayments
+ │
+ ├── Payouts
+ │
+ ├── Payments
+ │      │
+ │      ├── Payment Attempts
+ │      ├── Provider Transactions
+ │      └── Provider Callbacks
+ │
+ ├── Bank Accounts
+ │      │
+ │      └── Bank Transactions
+ │
+ ├── Reconciliation Records
+ │
+ ├── Ledger Accounts
+ │      │
+ │      └── Ledger Entries
+ │
+ └── Audit Logs
+
+---
+
+28. Member Registration Data Flow
+
+The registration process is:
+
+User
+ │
+ ├── Full Name
+ ├── Phone Number
+ └── ID Number
+       │
+       ▼
+   Validation
+       │
+       ├── Duplicate phone?
+       ├── Duplicate ID?
+       └── Valid data?
+       │
+       ▼
+    Create Member
+       │
+       ▼
+ Generate Member Number
+       │
+       ▼
+    NUCSA001
+
+Example database result:
+
+members
+
+id              = UUID
+full_name       = John Kamau
+phone_number    = 0712345678
+id_number       = 12345678
+member_number   = NUCSA001
+status          = ACTIVE
+
+---
+
+29. Member Number Generation Rules
+
+The implementation must guarantee:
+
+NUCSA001
+NUCSA002
+NUCSA003
+
+and never accidentally create:
+
+NUCSA001
+NUCSA001
+
+The database must enforce:
+
+UNIQUE(member_number)
+
+The sequence generation must also be concurrency-safe.
+
+Two members registering at approximately the same time must receive different numbers.
+
+Do not implement member number generation as:
+
+count = database.count_members()
+member_number = f"NUCSA{count + 1:03d}"
+
+This is unsafe under concurrent registrations.
+
+Use a database-backed sequence/counter or another transaction-safe allocation mechanism.
+
+---
+
+30. Phone Number Rules
+
+Phone numbers should be normalized before storage.
+
+For Kenya, the application should establish one canonical format.
+
+For example:
+
++254712345678
+
+rather than storing the same number inconsistently as:
+
+0712345678
++254712345678
+254712345678
+
+The final normalization rules should be implemented centrally.
+
+---
+
+31. ID Number Rules
+
+The system must prevent accidental duplicate identity records where the business rules require uniqueness.
+
+A member's government ID/passport number should not normally be duplicated within the same membership context.
+
+The exact uniqueness scope must be decided by the business requirements.
+
+---
+
+32. Monetary Field Rules
+
+All monetary values use:
+
+NUMERIC(14,2)
+
+Examples:
+
+1000.00
+15000.50
+250000.00
+
+Never use:
+
+FLOAT
+REAL
+DOUBLE PRECISION
+
+for monetary amounts.
+
+Application code should use Python "Decimal".
+
+---
+
+33. Timestamps
+
+Use PostgreSQL:
+
+TIMESTAMPTZ
+
+for timestamps.
+
+Recommended fields:
+
+created_at
+updated_at
+registered_at
+approved_at
+completed_at
+transaction_time
+
+Store timestamps consistently in UTC at the database/application layer and convert them for presentation where required.
+
+---
+
+34. Status Fields
+
+Statuses should use controlled values.
+
+Example:
+
+Member:
+ACTIVE
+INACTIVE
+SUSPENDED
+EXITED
+
+Payment:
+
+INITIATED
+PENDING
+SUCCESS
+FAILED
+CANCELLED
+REVERSED
+
+Loan:
+
+REQUESTED
+APPROVED
+REJECTED
+DISBURSED
+ACTIVE
+COMPLETED
+DEFAULTED
+
+The final status values must be defined in the relevant domain module.
+
+Do not allow arbitrary status strings throughout the application.
+
+---
+
+35. Soft Deletion
+
+Do not automatically delete important financial records.
+
+For ordinary records where deletion is appropriate, a soft-delete strategy may be considered:
+
+deleted_at
+
+Financial records should generally remain part of the historical record.
+
+---
+
+36. Indexing
+
+Indexes should be added based on actual query patterns.
+
+Important candidates include:
+
+members.member_number
+members.phone_number
+members.id_number
+
+memberships.member_id
+memberships.chama_id
+
+contributions.membership_id
+contributions.contribution_date
+
+payments.reference
+payments.status
+
+provider_transactions.provider_transaction_id
+
+bank_transactions.reference
+bank_transactions.transaction_time
+
+Do not blindly index every column.
+
+---
+
+37. Database Change Process
+
+Every schema change follows:
+
+Requirement
+    ↓
+Database design
+    ↓
+SQLAlchemy model
+    ↓
+Alembic migration
+    ↓
+Migration review
+    ↓
+Tests
+    ↓
+Apply migration
+
+Never manually change production schema without a controlled migration process.
+
+---
+
+38. Financial Traceability
+
+The system should be able to trace:
+
+Member
+  ↓
+Membership
+  ↓
+Contribution
+  ↓
+Payment
+  ↓
+Payment Attempt
+  ↓
+Provider Transaction
+  ↓
+Bank Transaction
+  ↓
+Reconciliation
+  ↓
+Ledger Entry
+
+Not every payment will necessarily have every node in this chain.
+
+For example, a provider callback may confirm a payment without the application directly receiving a corresponding bank transaction.
+
+The database design must therefore preserve the distinction between:
+
+Payment
+Provider Transaction
+Bank Transaction
+Ledger Entry
+
+---
+
+39. Database Design Rule
+
+«Do not design tables merely around screens. Design them around the real business entities and relationships.»
+
+For example, do not create:
+
+member_dashboard_data
+payment_screen_data
+loan_page_data
+
+as database tables simply because those are frontend screens.
+
+Instead model the actual entities:
+
+members
+memberships
+contributions
+payments
+loans
+loan_repayments
+ledger_entries
+
+The frontend should consume the domain model through APIs.
+
+---
+
+40. Current V1 Database Scope
+
+The first implementation should focus on:
+
+users
+chamas
+members
+memberships
+roles
+membership_roles
+contributions
+shares
+
+Do not implement every table in this document immediately.
+
+Future tables should be introduced when their corresponding roadmap version is implemented.
+
+V1
+
+Chama
+Members
+Memberships
+Roles
+Registration Fees
+Contributions
+Shares
+
+V2
+
+Loans
+Loan Repayments
+Payouts
+Ledger
+
+V3+
+
+Payments
+Payment Attempts
+Provider Transactions
+Provider Callbacks
+Bank Accounts
+Bank Transactions
+Reconciliation
+
+---
+
+41. Final Database Principle
+
+ChamaCore's database must answer:
+
+«Who is this member, which Chama do they belong to, what have they contributed, what shares do they have, what do they owe, what payments have occurred, what external transactions confirm those payments, and how are those transactions represented in the financial records?»
+
+If the database cannot reliably answer those questions, the schema is not yet ready for production.
+
+---
+
+42. Source of Truth
+
+The following files define the project together:
+
+RULES.md
+    ↓
+Engineering rules
+
+SDLC.md
+    ↓
+Development process and roadmap
+
+DATABASE.md
+    ↓
+Database structure and data rules
+
+README.md
+    ↓
+Project overview and setup
+
+If these documents conflict, the team must resolve the conflict explicitly rather than silently implementing different interpretations.
