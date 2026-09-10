@@ -1,0 +1,946 @@
+Yes. I would make the PaymentProvider service the core integration boundary of the Chama system.
+
+One important correction to the earlier idea: we should not pretend that one provider gives unrestricted access to every Kenyan bank account. The providers expose different capabilities. For example, KCB BUNI currently advertises payments across all banks and mobile-money networks, while its account-information APIs are for KCB-connected banking information. Jenga documents broader payment services but currently documents its Account Services around Equity. NCBA offers its own API/host-to-host and collection/reconciliation solutions. 
+
+Final Chama Platform Plan
+
+1. Overall architecture
+
+┌─────────────────────┐
+                         │   React Web App     │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │ React Native Mobile │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │      FastAPI        │
+                         │     REST API        │
+                         └──────────┬──────────┘
+                                    │
+        ┌───────────────────────────┼───────────────────────────┐
+        │                           │                           │
+        ▼                           ▼                           ▼
+ ┌──────────────┐           ┌──────────────┐           ┌──────────────┐
+ │ Chama Domain │           │ Payment      │           │   Banking    │
+ │              │           │ Provider     │           │   Services   │
+ │ Members      │           │ Service      │           │              │
+ │ Contributions│           │              │           │ Balance      │
+ │ Shares       │           │ Jenga        │           │ Statements   │
+ │ Loans        │           │ KCB BUNI     │           │ Reconciliation│
+ │ Payouts      │           │ NCBA         │           │              │
+ └──────────────┘           │ Daraja       │           └──────────────┘
+                            └──────┬───────┘
+                                   │
+                    ┌──────────────┼───────────────┐
+                    ▼              ▼               ▼
+                 Jenga         KCB BUNI          NCBA
+                    │              │               │
+                 Equity         KCB/Networks     NCBA
+                    │
+                 M-Pesa
+
+The Chama domain should never directly call Jenga, KCB or NCBA.
+
+Instead:
+
+ContributionService
+        ↓
+PaymentProviderService
+        ↓
+Provider Adapter
+        ↓
+Jenga / KCB / NCBA / Daraja
+
+That is the important architectural decision.
+
+
+---
+
+2. Provider architecture
+
+Create an internal interface like:
+
+PaymentProvider
+│
+├── initiate_payment()
+├── get_payment_status()
+├── handle_callback()
+├── verify_transaction()
+├── refund_payment()
+└── reconcile()
+
+Then implement:
+
+PaymentProvider
+│
+├── JengaPaymentProvider
+├── KCBPaymentProvider
+├── NCBAPaymentProvider
+└── DarajaPaymentProvider
+
+The Chama application doesn't care which one is underneath.
+
+For example:
+
+member contributes KSh 1,000
+             ↓
+ContributionService
+             ↓
+PaymentProviderService
+             ↓
+Which provider?
+             ↓
+     ┌───────┴────────┐
+     │                │
+   Equity             KCB
+     ↓                ↓
+  Jenga            KCB BUNI
+
+
+---
+
+3. Provider selection
+
+Have a configuration for each Chama:
+
+Chama
+ └── PaymentConfiguration
+       ├── provider
+       ├── bank
+       ├── account_number
+       ├── account_name
+       └── settlement configuration
+
+Example:
+
+Chama A
+
+NUCSWG
+
+Bank:
+Equity
+
+Provider:
+Jenga
+
+Payment:
+M-Pesa STK Push
+
+Chama B
+
+Another Chama
+
+Bank:
+KCB
+
+Provider:
+KCB BUNI
+
+Payment:
+M-Pesa / Bank / other supported network
+
+Chama C
+
+Another Chama
+
+Bank:
+NCBA
+
+Provider:
+NCBA
+
+Payment:
+NCBA collection/API solution
+
+KCB BUNI explicitly provides receive-payment APIs and says its ecosystem connects to multiple payment networks, including all banks and M-Pesa, Airtel Money, T-Kash and VOOMA. 
+
+
+---
+
+4. V1: Chama management
+
+Do not integrate payments yet.
+
+Build the actual Chama system.
+
+Core entities
+
+User
+Chama
+Membership
+Role
+Contribution
+Share
+
+Roles:
+
+CHAIRPERSON
+TREASURER
+SECRETARY
+MEMBER
+
+Features
+
+Executive
+
+Create Chama
+
+Add members
+
+Remove members
+
+Assign roles
+
+View dashboard
+
+Manage contribution rules
+
+Manage shares
+
+
+Member
+
+Register
+
+View profile
+
+View contributions
+
+View shares
+
+View Chama information
+
+
+
+---
+
+5. V2: Financial system
+
+Now build the internal financial model.
+
+Contribution
+Share
+Loan
+LoanRepayment
+Payout
+FinancialTransaction
+LedgerEntry
+
+Do not simply create:
+
+chama.balance = 100000
+
+Instead, build a ledger.
+
+Example:
+
+Transaction #001
+Contribution
+John
++1,000
+
+Transaction #002
+Contribution
+Mary
++1,000
+
+Transaction #003
+Loan
+John
+-5,000
+
+Then the balance is derived from transactions.
+
+
+---
+
+6. V3: PaymentProviderService
+
+This is where the real payment architecture starts.
+
+Create:
+
+Payment
+PaymentAttempt
+ExternalTransaction
+ProviderCallback
+PaymentProviderConfiguration
+
+Example:
+
+Payment
+
+id
+chama_id
+member_id
+contribution_id
+amount
+currency
+provider
+provider_reference
+status
+created_at
+completed_at
+
+Statuses:
+
+PENDING
+PROCESSING
+COMPLETED
+FAILED
+CANCELLED
+REVERSED
+UNKNOWN
+
+
+---
+
+7. Payment flow
+
+For example, John wants to contribute KSh 1,000.
+
+John
+ │
+ │ 1. Click Pay
+ ▼
+React Native
+ │
+ │ POST /contributions/{id}/pay
+ ▼
+FastAPI
+ │
+ ▼
+ContributionService
+ │
+ ▼
+PaymentProviderService
+ │
+ ▼
+ProviderResolver
+ │
+ ├──── Equity → Jenga
+ ├──── KCB    → KCB BUNI
+ └──── NCBA   → NCBA
+
+Then:
+
+Jenga
+  ↓
+M-Pesa STK
+  ↓
+John's phone
+  ↓
+Enter PIN
+  ↓
+Payment
+  ↓
+Jenga callback
+  ↓
+FastAPI
+  ↓
+Payment COMPLETED
+  ↓
+Contribution PAID
+  ↓
+Ledger updated
+
+Jenga's documented STK flow supports account-based settlement and callback information for the transaction. 
+
+
+---
+
+8. V4: Jenga integration
+
+For an Equity Chama:
+
+JengaPaymentProvider
+
+handles:
+
+authenticate()
+initiate_stk()
+check_status()
+handle_callback()
+verify_transaction()
+
+The actual Jenga code stays isolated:
+
+providers/
+    jenga/
+        auth.py
+        stk.py
+        callbacks.py
+        client.py
+        mapper.py
+
+Your Chama code never imports Jenga directly.
+
+Bad:
+
+from jenga import JengaClient
+
+inside:
+
+contribution_service.py
+
+Good:
+
+payment_provider.initiate_payment(...)
+
+
+---
+
+9. V5: KCB BUNI integration
+
+Create:
+
+providers/
+    kcb/
+        auth.py
+        payments.py
+        accounts.py
+        callbacks.py
+        client.py
+        mapper.py
+
+KCB BUNI provides APIs for sending money, receiving payments and account services. Its production use requires the consuming business/customer to have a KCB or VOOMA account. 
+
+So:
+
+KCB Chama
+     ↓
+KCB account
+     ↓
+KCB BUNI
+     ↓
+PaymentProviderService
+     ↓
+Chama ledger
+
+BUNI also provides sandbox credentials and an OAuth-based authentication flow for development. 
+
+
+---
+
+10. V6: NCBA integration
+
+Create:
+
+providers/
+    ncba/
+        auth.py
+        payments.py
+        collections.py
+        accounts.py
+        callbacks.py
+        mapper.py
+
+NCBA currently advertises API integration for payments and collection/reconciliation solutions. It also supports M-Pesa collections directly into an NCBA account through its NCBA Till solution. 
+
+This gives us another provider:
+
+NCBA Chama
+     ↓
+NCBAProvider
+     ↓
+NCBA API
+     ↓
+Payment / Collection
+     ↓
+FastAPI
+     ↓
+Ledger
+
+
+---
+
+11. V7: Daraja provider
+
+Keep Daraja as a separate adapter.
+
+providers/
+    daraja/
+        auth.py
+        stk.py
+        c2b.py
+        callbacks.py
+        mapper.py
+
+This is useful because some Chamas may simply want:
+
+M-Pesa
+   ↓
+Daraja
+   ↓
+FastAPI
+
+without using a bank-specific API.
+
+So you now have:
+
+PaymentProvider
+                          │
+          ┌───────────────┼────────────────┐
+          │               │                │
+        Jenga           KCB              NCBA
+          │              BUNI              │
+          │               │                │
+       Equity            KCB             NCBA
+          │
+       M-Pesa
+
+                          +
+                       Daraja
+                          │
+                       M-Pesa
+
+
+---
+
+12. V8: Reconciliation
+
+This is extremely important for a financial application.
+
+Suppose:
+
+Internal system:
+
+Contribution #543
+John
+KSh 1,000
+
+Provider says:
+
+Transaction:
+ABC123
+KSh 1,000
+COMPLETED
+
+Your reconciliation engine connects them:
+
+Contribution #543
+       ↓
+Payment #900
+       ↓
+Provider transaction ABC123
+       ↓
+COMPLETED
+       ↓
+Ledger + KSh 1,000
+
+Never rely only on:
+
+amount == 1000
+
+Use:
+
+provider
+provider_transaction_id
+payment_reference
+amount
+timestamp
+status
+
+
+---
+
+13. Payment reference strategy
+
+This is especially important with Jenga.
+
+Don't send your database UUID everywhere.
+
+Generate an internal short reference:
+
+P7K92A
+
+Database:
+
+P7K92A
+    ↓
+Payment ID:
+550e8400-e29b...
+    ↓
+Contribution:
+C-00981
+    ↓
+Member:
+John
+
+If the provider has a restricted reference format/length, your mapping table handles it.
+
+
+---
+
+14. Webhook architecture
+
+Every provider should eventually have its own endpoint.
+
+POST /webhooks/jenga
+POST /webhooks/kcb
+POST /webhooks/ncba
+POST /webhooks/daraja
+
+But internally they all convert their payload into one format:
+
+NormalizedPaymentEvent
+
+For example:
+
+{
+  "provider": "jenga",
+  "provider_transaction_id": "ABC123",
+  "payment_reference": "P7K92A",
+  "amount": 1000,
+  "currency": "KES",
+  "status": "COMPLETED"
+}
+
+Then:
+
+Webhook
+   ↓
+Provider Adapter
+   ↓
+Normalize
+   ↓
+PaymentService
+   ↓
+Reconciliation
+   ↓
+Ledger
+
+This is one of the most important parts of the architecture.
+
+
+---
+
+15. Idempotency
+
+Imagine Jenga sends the same callback twice.
+
+Without protection:
+
+Callback #1
++1,000
+
+Callback #2
++1,000
+
+Balance:
++2,000 ❌
+
+With idempotency:
+
+Callback #1
+ABC123 → process
+
+Callback #2
+ABC123 → already processed
+
+Ignore
+
+Database constraint:
+
+UNIQUE(provider, provider_transaction_id)
+
+This should be mandatory.
+
+
+---
+
+16. V9: Bank reconciliation
+
+Now we solve the other question you originally asked:
+
+> "How does my application know money actually reached the bank?"
+
+
+
+There are two separate events:
+
+PAYMENT EVENT
+      ↓
+M-Pesa/provider confirms payment
+
+and:
+
+BANK EVENT
+      ↓
+Bank confirms account transaction
+
+Don't confuse them.
+
+For banks that expose appropriate account/transaction services:
+
+Bank
+ ↓
+Account API
+ ↓
+Statement / transaction
+ ↓
+BankReconciliationService
+ ↓
+Internal ledger
+
+For example, Jenga documents account services for Equity, while KCB BUNI provides account services for KCB-connected systems. 
+
+
+---
+
+17. V10: Bank abstraction
+
+Create another interface:
+
+BankProvider
+│
+├── get_balance()
+├── get_transactions()
+├── get_statement()
+├── validate_account()
+└── reconcile()
+
+Then:
+
+BankProvider
+│
+├── JengaBankProvider
+├── KCBBankProvider
+└── NCBABankProvider
+
+Now you have two separate abstractions:
+
+PaymentProvider
+      ↓
+Collect / send money
+
+BankProvider
+      ↓
+Balance / statements / transactions
+
+That separation is very important.
+
+
+---
+
+18. Final backend structure
+
+I would structure the FastAPI project approximately like this:
+
+app/
+│
+├── api/
+│   ├── auth/
+│   ├── chamas/
+│   ├── members/
+│   ├── contributions/
+│   ├── shares/
+│   ├── loans/
+│   ├── payouts/
+│   ├── payments/
+│   ├── reports/
+│   └── webhooks/
+│
+├── domain/
+│   ├── chamas/
+│   ├── members/
+│   ├── contributions/
+│   ├── loans/
+│   ├── payments/
+│   └── ledger/
+│
+├── services/
+│   ├── chama_service.py
+│   ├── contribution_service.py
+│   ├── loan_service.py
+│   ├── ledger_service.py
+│   ├── payment_service.py
+│   ├── reconciliation_service.py
+│   └── provider_service.py
+│
+├── providers/
+│   │
+│   ├── base/
+│   │   ├── payment_provider.py
+│   │   └── bank_provider.py
+│   │
+│   ├── jenga/
+│   │   ├── client.py
+│   │   ├── auth.py
+│   │   ├── payments.py
+│   │   ├── accounts.py
+│   │   └── callbacks.py
+│   │
+│   ├── kcb/
+│   │   ├── client.py
+│   │   ├── auth.py
+│   │   ├── payments.py
+│   │   ├── accounts.py
+│   │   └── callbacks.py
+│   │
+│   ├── ncba/
+│   │   ├── client.py
+│   │   ├── auth.py
+│   │   ├── payments.py
+│   │   ├── collections.py
+│   │   └── callbacks.py
+│   │
+│   └── daraja/
+│       ├── client.py
+│       ├── auth.py
+│       ├── stk.py
+│       ├── c2b.py
+│       └── callbacks.py
+│
+├── models/
+├── schemas/
+├── repositories/
+├── db/
+├── security/
+├── workers/
+├── config/
+└── main.py
+
+
+---
+
+19. Database
+
+The core tables become:
+
+users
+chamas
+memberships
+roles
+
+contributions
+shares
+
+loans
+loan_repayments
+
+payments
+payment_attempts
+provider_transactions
+provider_callbacks
+
+bank_accounts
+bank_transactions
+
+ledger_accounts
+ledger_entries
+
+reconciliation_records
+
+audit_logs
+notifications
+
+The important relationship is:
+
+Member
+  ↓
+Contribution
+  ↓
+Payment
+  ↓
+ProviderTransaction
+  ↓
+LedgerEntry
+
+And separately:
+
+BankAccount
+  ↓
+BankTransaction
+  ↓
+ReconciliationRecord
+  ↓
+LedgerEntry
+
+
+---
+
+20. Complete version roadmap
+
+Version	What we build
+
+V1	Chama, members, roles, registration, contributions, shares
+V2	Loans, repayments, payouts, ledger
+V3	Payment domain + PaymentProvider abstraction
+V4	Jenga + M-Pesa STK
+V5	Jenga callbacks + automatic contribution confirmation
+V6	KCB BUNI provider
+V7	NCBA provider
+V8	Daraja provider
+V9	Reconciliation engine
+V10	Bank account/statement integrations
+V11	Notifications + SMS/email/push
+V12	React web dashboard
+V13	React Native mobile app
+V14	USSD
+V15	Security, audit, backups, monitoring, production hardening
+
+
+
+---
+
+21. The final provider model
+
+The end result should look like this:
+
+CHAMA PLATFORM
+                               │
+                               ▼
+                         FastAPI Backend
+                               │
+              ┌────────────────┴────────────────┐
+              │                                 │
+              ▼                                 ▼
+       PaymentProvider                     BankProvider
+              │                                 │
+     ┌────────┼────────┐              ┌─────────┼────────┐
+     │        │        │              │         │        │
+     ▼        ▼        ▼              ▼         ▼        ▼
+   Jenga    KCB      NCBA           Jenga      KCB      NCBA
+     │       BUNI      │              │         │        │
+     │        │        │              │         │        │
+  Equity     KCB     NCBA          Equity      KCB     NCBA
+     │
+     ▼
+   M-Pesa
+
+                     + Daraja
+                         │
+                         ▼
+                      M-Pesa
+
+The critical design principle
+
+The Chama application is provider-agnostic.
+
+It should be able to say:
+
+await payment_service.collect(
+    chama_id=chama.id,
+    member_id=member.id,
+    amount=1000
+)
+
+without knowing whether the underlying payment is:
+
+Jenga
+KCB BUNI
+NCBA
+Daraja
+
+The PaymentProviderService decides.
+
+That gives you a genuinely extensible Kenyan financial platform rather than a "Jenga Chama app."
+
+And because KCB BUNI currently advertises interoperability across all Kenyan banks/payment networks, it is worth treating BUNI as an important provider candidate for broad payment-network coverage, while retaining bank-specific adapters for account data and reconciliation. 
+
+For production, each bank/provider still needs its own onboarding, credentials, approved products, limits and commercial agreement. KCB, for example, explicitly requires a KCB or VOOMA account for production BUNI API use. 
+
+This is the architecture I would lock in before writing the first payment integration.
