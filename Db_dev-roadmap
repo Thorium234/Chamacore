@@ -1,0 +1,1455 @@
+ChamaCore Database Specification
+
+«Development Database: SQLite
+Production Database: PostgreSQL
+ORM: SQLAlchemy 2.x
+Migrations: Alembic
+
+This document defines the complete ChamaCore database model from V1 through future versions.
+
+We design the complete domain model early so that relationships and ownership are understood before implementation. However, we only create and migrate the tables required by the current roadmap version.»
+
+---
+
+1. Database Strategy
+
+Development
+
+ChamaCore uses:
+
+SQLite
+
+during active development.
+
+The reason is simple:
+
+- The schema will change frequently.
+- Features will break while being developed.
+- Developers should be able to reset the development database quickly.
+- No database server is required for local development.
+- Developers can work independently without maintaining PostgreSQL instances.
+
+Example:
+
+chamacore.db
+
+A developer should be able to delete the local database and recreate it from migrations.
+
+rm chamacore.db
+alembic upgrade head
+
+---
+
+2. Production Database
+
+The intended production database is:
+
+PostgreSQL
+
+SQLite is therefore a development database, not a permanent architectural commitment.
+
+The application must use SQLAlchemy so that the domain and repository layers are not tightly coupled to SQLite-specific SQL.
+
+Application
+     │
+     ▼
+SQLAlchemy
+     │
+ ┌───┴────┐
+ ▼        ▼
+SQLite  PostgreSQL
+ DEV     PROD
+
+---
+
+3. SQLite Compatibility Rule
+
+Developers must avoid unnecessary database-specific SQL.
+
+Prefer:
+
+SQLAlchemy ORM
+
+over raw SQL.
+
+When raw SQL is genuinely required, verify that the implementation will have a clear PostgreSQL equivalent.
+
+Do not design the domain around SQLite limitations.
+
+---
+
+4. Database Evolution Strategy
+
+We define the complete domain model early:
+
+V1
+ │
+ ├── Chama
+ ├── Users
+ ├── Members
+ ├── Memberships
+ ├── Roles
+ ├── Membership Roles
+ ├── Contributions
+ └── Shares
+       │
+       ▼
+V2
+ │
+ ├── Loans
+ ├── Loan Repayments
+ ├── Payouts
+ └── Ledger
+       │
+       ▼
+V3+
+ │
+ ├── Payments
+ ├── Payment Attempts
+ ├── Provider Transactions
+ ├── Provider Callbacks
+ ├── Bank Accounts
+ ├── Bank Transactions
+ ├── Reconciliation
+ ├── Audit Logs
+ └── Notifications
+
+The models can exist in the codebase ahead of their implementation version.
+
+However:
+
+«Do not create database tables for future functionality until that version is being implemented.»
+
+This gives the team architectural clarity without forcing unfinished functionality into the database.
+
+---
+
+5. Critical Identity Concept
+
+ChamaCore separates:
+
+Person
+
+from:
+
+Membership in a Chama
+
+These are NOT the same thing.
+
+---
+
+Member
+
+A "Member" represents the person's identity.
+
+Example:
+
+John Kamau
+0712345678
+12345678
+
+The member exists independently of a particular Chama.
+
+---
+
+Membership
+
+A "Membership" represents:
+
+«John Kamau's membership in NUC Students Welfare Chama.»
+
+Therefore:
+
+Member
+   │
+   ├── Membership → Chama A
+   │
+   └── Membership → Chama B
+
+This makes the system capable of supporting multiple Chamas without duplicating the person's identity.
+
+---
+
+6. Ownership Model
+
+The ownership chain is:
+
+User
+ │
+ ▼
+Member
+ │
+ ▼
+Membership
+ │
+ ▼
+Chama
+
+Financial/business records belong to the membership, not directly to the person's identity.
+
+For example:
+
+Membership
+    │
+    ├── Contributions
+    ├── Shares
+    ├── Loans
+    ├── Loan Repayments
+    └── Payouts
+
+This means:
+
+Member
+
+answers:
+
+«Who is this person?»
+
+While:
+
+Membership
+
+answers:
+
+«What is this person's relationship with this Chama?»
+
+---
+
+7. UUID Strategy
+
+All major entities use UUID primary keys.
+
+Example:
+
+id: Mapped[UUID] = mapped_column(
+    UUID(as_uuid=True),
+    primary_key=True,
+    default=uuid.uuid4,
+)
+
+The UUID is the internal database identifier.
+
+Human-readable identifiers such as:
+
+NUCSA001
+NUCSA002
+
+are separate fields.
+
+---
+
+8. Base SQLAlchemy Model
+
+All models should inherit common timestamp behavior from a shared base.
+
+import uuid
+from datetime import datetime
+from uuid import UUID
+
+from sqlalchemy import DateTime, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class TimestampMixin:
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+For SQLite development, UUID portability should be handled through the project's chosen SQLAlchemy type strategy rather than scattering database-specific types through every model.
+
+---
+
+9. V1 Models
+
+V1 consists of:
+
+users
+chamas
+members
+memberships
+roles
+membership_roles
+contributions
+shares
+
+---
+
+10. Users Model
+
+A "User" represents an authenticated account.
+
+class User(Base, TimestampMixin):
+    __tablename__ = "users"
+
+    id: Mapped[UUID]
+    
+    phone_number: Mapped[str]
+    email: Mapped[str | None]
+    password_hash: Mapped[str]
+
+    is_active: Mapped[bool]
+    last_login_at: Mapped[datetime | None]
+
+Fields
+
+Field| Type| Required| Purpose
+"id"| UUID| Yes| Internal identifier
+"phone_number"| VARCHAR| Yes| Login/contact number
+"email"| VARCHAR| No| Email
+"password_hash"| TEXT| Yes| Hashed password
+"is_active"| BOOLEAN| Yes| Account status
+"last_login_at"| TIMESTAMP| No| Last login
+"created_at"| TIMESTAMP| Yes| Creation
+"updated_at"| TIMESTAMP| Yes| Last update
+
+---
+
+11. Chamas Model
+
+A "Chama" represents the group.
+
+class Chama(Base, TimestampMixin):
+    __tablename__ = "chamas"
+
+    id: Mapped[UUID]
+
+    name: Mapped[str]
+    code: Mapped[str]
+    description: Mapped[str | None]
+
+    registration_fee: Mapped[Decimal]
+    currency: Mapped[str]
+
+    status: Mapped[str]
+
+Fields
+
+Field| Type| Required| Purpose
+"id"| UUID| Yes| Chama ID
+"name"| VARCHAR(150)| Yes| Chama name
+"code"| VARCHAR(20)| Yes| Chama code
+"description"| TEXT| No| Description
+"registration_fee"| NUMERIC| Yes| Registration fee
+"currency"| CHAR(3)| Yes| Currency
+"status"| VARCHAR| Yes| Chama status
+"created_at"| TIMESTAMP| Yes| Creation
+"updated_at"| TIMESTAMP| Yes| Last update
+
+Example:
+
+name = NUC Students Welfare Chama
+code = NUCSA
+currency = KES
+
+---
+
+12. Members Model
+
+The member represents the person's identity.
+
+class Member(Base, TimestampMixin):
+    __tablename__ = "members"
+
+    id: Mapped[UUID]
+
+    user_id: Mapped[UUID | None]
+
+    full_name: Mapped[str]
+    phone_number: Mapped[str]
+    id_number: Mapped[str]
+
+    status: Mapped[str]
+    registered_at: Mapped[datetime]
+
+Fields
+
+Field| Type| Required| Purpose
+"id"| UUID| Yes| Internal member ID
+"user_id"| UUID| No| Linked login account
+"full_name"| VARCHAR(200)| Yes| Full legal name
+"phone_number"| VARCHAR(20)| Yes| Member phone
+"id_number"| VARCHAR(50)| Yes| Government ID/passport
+"status"| VARCHAR(30)| Yes| Member status
+"registered_at"| TIMESTAMP| Yes| Registration date
+"created_at"| TIMESTAMP| Yes| Creation
+"updated_at"| TIMESTAMP| Yes| Last update
+
+Important
+
+There is no "member_number" here.
+
+The member number belongs to the Chama membership.
+
+Why?
+
+Because the same person could potentially belong to:
+
+NUC Students Welfare Chama
+    → NUCSA001
+
+Kikai Development Chama
+    → KIKA001
+
+The person's identity remains the same.
+
+---
+
+13. Memberships Model
+
+Membership connects:
+
+Member
+   ↓
+Chama
+
+class Membership(Base, TimestampMixin):
+    __tablename__ = "memberships"
+
+    id: Mapped[UUID]
+
+    member_id: Mapped[UUID]
+    chama_id: Mapped[UUID]
+
+    member_number: Mapped[str]
+
+    joined_at: Mapped[datetime]
+    status: Mapped[str]
+
+    registration_fee: Mapped[Decimal]
+    registration_fee_status: Mapped[str]
+
+Fields
+
+Field| Type| Required| Purpose
+"id"| UUID| Yes| Membership ID
+"member_id"| UUID| Yes| Member owner
+"chama_id"| UUID| Yes| Chama
+"member_number"| VARCHAR(30)| Yes| Chama-specific number
+"joined_at"| TIMESTAMP| Yes| Joining date
+"status"| VARCHAR(30)| Yes| Membership status
+"registration_fee"| NUMERIC| Yes| Applicable fee
+"registration_fee_status"| VARCHAR(30)| Yes| Fee status
+"created_at"| TIMESTAMP| Yes| Creation
+"updated_at"| TIMESTAMP| Yes| Last update
+
+---
+
+14. Membership Ownership
+
+Every Chama-specific financial record must ultimately be traceable to:
+
+Membership
+
+For example:
+
+Membership NUCSA001
+      │
+      ├── Contribution
+      ├── Share
+      ├── Loan
+      ├── Loan Repayment
+      └── Payout
+
+This is the central ownership rule of ChamaCore.
+
+---
+
+15. Member Number
+
+Member number:
+
+NUCSA001
+
+is generated by the system.
+
+The user only provides:
+
+Full Name
+Phone Number
+ID Number
+
+Registration:
+
+Full Name
+      +
+Phone Number
+      +
+ID Number
+      │
+      ▼
+    Member
+      │
+      ▼
+ Membership
+      │
+      ▼
+NUCSA001
+
+---
+
+16. Member Number Generation
+
+Never use:
+
+count = session.query(Membership).count()
+number = count + 1
+
+This creates race conditions.
+
+Instead use a transaction-safe sequence/counter mechanism.
+
+A future implementation may use a dedicated counter table:
+
+membership_sequences
+
+with:
+
+id
+chama_id
+next_number
+
+The number allocation must happen inside a transaction.
+
+Example:
+
+NUCSA001
+NUCSA002
+NUCSA003
+
+If a member leaves, the number must not normally be reused.
+
+---
+
+17. Membership Uniqueness
+
+A member should not have duplicate membership in the same Chama.
+
+Conceptually:
+
+UNIQUE(member_id, chama_id)
+
+Therefore:
+
+John + NUCSA
+
+can exist once.
+
+But:
+
+John + NUCSA
+John + KIKA
+
+can exist as separate memberships.
+
+---
+
+18. Roles Model
+
+class Role(Base, TimestampMixin):
+    __tablename__ = "roles"
+
+    id: Mapped[UUID]
+
+    chama_id: Mapped[UUID]
+
+    name: Mapped[str]
+    description: Mapped[str | None]
+
+Examples:
+
+CHAIRPERSON
+TREASURER
+SECRETARY
+MEMBER
+
+---
+
+19. Membership Roles Model
+
+Roles belong to memberships.
+
+class MembershipRole(Base, TimestampMixin):
+    __tablename__ = "membership_roles"
+
+    id: Mapped[UUID]
+
+    membership_id: Mapped[UUID]
+    role_id: Mapped[UUID]
+
+    assigned_at: Mapped[datetime]
+    assigned_by: Mapped[UUID | None]
+
+Therefore:
+
+Member
+   ↓
+Membership
+   ↓
+Role
+
+not:
+
+User
+   ↓
+Role
+
+because roles are Chama-specific.
+
+---
+
+20. Contributions Model
+
+A contribution belongs to a membership.
+
+class Contribution(Base, TimestampMixin):
+    __tablename__ = "contributions"
+
+    id: Mapped[UUID]
+
+    membership_id: Mapped[UUID]
+
+    amount: Mapped[Decimal]
+    currency: Mapped[str]
+
+    contribution_date: Mapped[date]
+    period: Mapped[str | None]
+
+    status: Mapped[str]
+    notes: Mapped[str | None]
+
+Fields
+
+Field| Type| Required
+"id"| UUID| Yes
+"membership_id"| UUID| Yes
+"amount"| NUMERIC(14,2)| Yes
+"currency"| CHAR(3)| Yes
+"contribution_date"| DATE| Yes
+"period"| VARCHAR| No
+"status"| VARCHAR| Yes
+"notes"| TEXT| No
+"created_at"| TIMESTAMP| Yes
+"updated_at"| TIMESTAMP| Yes
+
+---
+
+21. Shares Model
+
+Shares belong to a membership.
+
+class Share(Base, TimestampMixin):
+    __tablename__ = "shares"
+
+    id: Mapped[UUID]
+
+    membership_id: Mapped[UUID]
+    source_contribution_id: Mapped[UUID | None]
+
+    quantity: Mapped[Decimal]
+    value: Mapped[Decimal]
+
+The exact calculation of shares is a business rule and must not be guessed by developers.
+
+---
+
+22. V1 Relationship Diagram
+
+                    ┌─────────────┐
+                    │    User     │
+                    └──────┬──────┘
+                           │
+                           │ optional
+                           ▼
+                    ┌─────────────┐
+                    │   Member    │
+                    │             │
+                    │ Full Name   │
+                    │ Phone       │
+                    │ ID Number   │
+                    └──────┬──────┘
+                           │
+                           │ member_id
+                           ▼
+                    ┌─────────────┐
+                    │ Membership  │
+                    │             │
+                    │ NUCSA001    │
+                    └──────┬──────┘
+                           │
+              ┌────────────┼─────────────┐
+              │            │             │
+              ▼            ▼             ▼
+        Contributions    Shares        Roles
+              │
+              │
+              ▼
+          Future Payment
+
+And:
+
+Chama
+  │
+  ├── Memberships
+  ├── Roles
+  ├── Contributions
+  └── Shares
+
+---
+
+23. V2 Models
+
+V2 introduces financial management.
+
+loans
+loan_repayments
+payouts
+ledger_accounts
+ledger_entries
+
+---
+
+24. Loans Model
+
+class Loan(Base, TimestampMixin):
+    __tablename__ = "loans"
+
+    id: Mapped[UUID]
+
+    membership_id: Mapped[UUID]
+
+    principal_amount: Mapped[Decimal]
+    interest_rate: Mapped[Decimal]
+
+    term: Mapped[int]
+    term_unit: Mapped[str]
+
+    status: Mapped[str]
+
+    approved_by: Mapped[UUID | None]
+    approved_at: Mapped[datetime | None]
+    disbursed_at: Mapped[datetime | None]
+
+A loan belongs to the member's membership, not directly to "members".
+
+---
+
+25. Loan Repayments Model
+
+class LoanRepayment(Base, TimestampMixin):
+    __tablename__ = "loan_repayments"
+
+    id: Mapped[UUID]
+
+    loan_id: Mapped[UUID]
+
+    amount: Mapped[Decimal]
+    principal_amount: Mapped[Decimal]
+    interest_amount: Mapped[Decimal]
+
+    payment_date: Mapped[datetime]
+    status: Mapped[str]
+
+---
+
+26. Payouts Model
+
+class Payout(Base, TimestampMixin):
+    __tablename__ = "payouts"
+
+    id: Mapped[UUID]
+
+    membership_id: Mapped[UUID]
+
+    amount: Mapped[Decimal]
+    currency: Mapped[str]
+
+    reason: Mapped[str | None]
+    status: Mapped[str]
+
+    approved_by: Mapped[UUID | None]
+    approved_at: Mapped[datetime | None]
+    paid_at: Mapped[datetime | None]
+
+---
+
+27. Ledger Accounts
+
+class LedgerAccount(Base, TimestampMixin):
+    __tablename__ = "ledger_accounts"
+
+    id: Mapped[UUID]
+
+    chama_id: Mapped[UUID]
+
+    account_code: Mapped[str]
+    name: Mapped[str]
+    account_type: Mapped[str]
+    currency: Mapped[str]
+
+---
+
+28. Ledger Entries
+
+class LedgerEntry(Base, TimestampMixin):
+    __tablename__ = "ledger_entries"
+
+    id: Mapped[UUID]
+
+    chama_id: Mapped[UUID]
+    account_id: Mapped[UUID]
+
+    payment_id: Mapped[UUID | None]
+
+    debit: Mapped[Decimal]
+    credit: Mapped[Decimal]
+
+    currency: Mapped[str]
+    description: Mapped[str | None]
+
+    entry_date: Mapped[datetime]
+
+Ledger implementation must maintain:
+
+Total Debits = Total Credits
+
+for every balanced accounting transaction.
+
+---
+
+29. V3 Payment Models
+
+V3 introduces the internal payment architecture.
+
+payments
+payment_attempts
+provider_transactions
+provider_callbacks
+
+---
+
+30. Payments Model
+
+class Payment(Base, TimestampMixin):
+    __tablename__ = "payments"
+
+    id: Mapped[UUID]
+
+    chama_id: Mapped[UUID]
+
+    membership_id: Mapped[UUID | None]
+
+    contribution_id: Mapped[UUID | None]
+    loan_repayment_id: Mapped[UUID | None]
+    payout_id: Mapped[UUID | None]
+
+    amount: Mapped[Decimal]
+    currency: Mapped[str]
+
+    provider: Mapped[str]
+    status: Mapped[str]
+
+    reference: Mapped[str]
+
+Payment is the internal representation of the money movement request.
+
+---
+
+31. Payment Attempts
+
+class PaymentAttempt(Base, TimestampMixin):
+    __tablename__ = "payment_attempts"
+
+    id: Mapped[UUID]
+
+    payment_id: Mapped[UUID]
+
+    provider: Mapped[str]
+    attempt_number: Mapped[int]
+
+    status: Mapped[str]
+
+    requested_at: Mapped[datetime]
+    completed_at: Mapped[datetime | None]
+
+    failure_reason: Mapped[str | None]
+
+---
+
+32. Provider Transactions
+
+class ProviderTransaction(Base, TimestampMixin):
+    __tablename__ = "provider_transactions"
+
+    id: Mapped[UUID]
+
+    payment_id: Mapped[UUID]
+
+    provider: Mapped[str]
+    provider_transaction_id: Mapped[str]
+    provider_reference: Mapped[str | None]
+
+    amount: Mapped[Decimal]
+    currency: Mapped[str]
+
+    status: Mapped[str]
+    transaction_time: Mapped[datetime | None]
+
+Required uniqueness:
+
+(provider, provider_transaction_id)
+
+This prevents duplicate external transactions from being processed as separate payments.
+
+---
+
+33. Provider Callbacks
+
+class ProviderCallback(Base):
+    __tablename__ = "provider_callbacks"
+
+    id: Mapped[UUID]
+
+    provider: Mapped[str]
+    event_type: Mapped[str]
+
+    provider_transaction_id: Mapped[str | None]
+
+    payload: Mapped[dict]
+
+    signature_valid: Mapped[bool]
+    processed: Mapped[bool]
+
+    processed_at: Mapped[datetime | None]
+    received_at: Mapped[datetime]
+
+Provider payloads should be preserved for debugging and audit purposes, subject to security and data-retention rules.
+
+---
+
+34. Bank Models
+
+Bank functionality is introduced later.
+
+bank_accounts
+bank_transactions
+reconciliation_records
+
+---
+
+35. Bank Accounts
+
+class BankAccount(Base, TimestampMixin):
+    __tablename__ = "bank_accounts"
+
+    id: Mapped[UUID]
+
+    chama_id: Mapped[UUID]
+
+    provider: Mapped[str]
+    bank_name: Mapped[str]
+
+    account_number: Mapped[str]
+    account_name: Mapped[str]
+
+    currency: Mapped[str]
+    status: Mapped[str]
+
+---
+
+36. Bank Transactions
+
+class BankTransaction(Base, TimestampMixin):
+    __tablename__ = "bank_transactions"
+
+    id: Mapped[UUID]
+
+    bank_account_id: Mapped[UUID]
+
+    provider: Mapped[str]
+    provider_transaction_id: Mapped[str | None]
+
+    reference: Mapped[str | None]
+
+    transaction_type: Mapped[str]
+    amount: Mapped[Decimal]
+    currency: Mapped[str]
+
+    description: Mapped[str | None]
+
+    transaction_time: Mapped[datetime]
+
+---
+
+37. Reconciliation Records
+
+class ReconciliationRecord(Base, TimestampMixin):
+    __tablename__ = "reconciliation_records"
+
+    id: Mapped[UUID]
+
+    chama_id: Mapped[UUID]
+
+    payment_id: Mapped[UUID | None]
+
+    provider_transaction_id: Mapped[UUID | None]
+    bank_transaction_id: Mapped[UUID | None]
+
+    status: Mapped[str]
+
+    matched_amount: Mapped[Decimal | None]
+
+    reconciled_at: Mapped[datetime | None]
+    reconciled_by: Mapped[UUID | None]
+
+    notes: Mapped[str | None]
+
+---
+
+38. Audit Logs
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[UUID]
+
+    user_id: Mapped[UUID | None]
+    chama_id: Mapped[UUID | None]
+
+    action: Mapped[str]
+    entity_type: Mapped[str]
+    entity_id: Mapped[UUID | None]
+
+    old_values: Mapped[dict | None]
+    new_values: Mapped[dict | None]
+
+    ip_address: Mapped[str | None]
+
+    created_at: Mapped[datetime]
+
+---
+
+39. Notifications
+
+class Notification(Base, TimestampMixin):
+    __tablename__ = "notifications"
+
+    id: Mapped[UUID]
+
+    user_id: Mapped[UUID]
+
+    type: Mapped[str]
+    channel: Mapped[str]
+
+    title: Mapped[str | None]
+    message: Mapped[str]
+
+    status: Mapped[str]
+    sent_at: Mapped[datetime | None]
+
+---
+
+40. Complete Future Relationship Model
+
+                           USER
+                            │
+                            │
+                            ▼
+                          MEMBER
+                            │
+                            │
+                            ▼
+                       MEMBERSHIP
+                            │
+             ┌──────────────┼──────────────┐
+             │              │              │
+             ▼              ▼              ▼
+       CONTRIBUTIONS      SHARES         ROLES
+             │
+             │
+             ▼
+          PAYMENTS
+             │
+       ┌─────┼──────────────┐
+       │     │              │
+       ▼     ▼              ▼
+   ATTEMPTS PROVIDER     CALLBACKS
+              TX
+       │
+       ▼
+ RECONCILIATION
+       │
+       ▼
+      LEDGER
+
+
+MEMBERSHIP
+    │
+    ├── LOANS
+    │     │
+    │     └── LOAN REPAYMENTS
+    │
+    └── PAYOUTS
+
+
+CHAMA
+  │
+  ├── MEMBERSHIPS
+  ├── ROLES
+  ├── LEDGER ACCOUNTS
+  ├── BANK ACCOUNTS
+  │       │
+  │       └── BANK TRANSACTIONS
+  │
+  ├── PAYMENTS
+  ├── RECONCILIATION
+  └── AUDIT LOGS
+
+---
+
+41. Financial Ownership Rule
+
+The ownership hierarchy is:
+
+Chama
+   │
+   ▼
+Membership
+   │
+   ├── Contribution
+   ├── Share
+   ├── Loan
+   ├── Loan Repayment
+   └── Payout
+
+Payment infrastructure then records how money moved:
+
+Business Record
+      │
+      ▼
+Payment
+      │
+      ▼
+Payment Attempt
+      │
+      ▼
+Provider Transaction
+      │
+      ▼
+Bank Transaction
+      │
+      ▼
+Reconciliation
+      │
+      ▼
+Ledger
+
+Not every payment will necessarily have every record in this chain.
+
+---
+
+42. Monetary Data
+
+All money uses:
+
+NUMERIC(14,2)
+
+and Python:
+
+Decimal
+
+Never:
+
+float
+
+for financial amounts.
+
+Examples:
+
+1000.00 KES
+25000.00 KES
+150000.50 KES
+
+---
+
+43. Dates and Times
+
+Use timezone-aware timestamps where appropriate.
+
+Application code should consistently handle:
+
+datetime
+
+using timezone-aware values.
+
+Business dates such as:
+
+contribution_date
+
+may use "DATE" when a time of day is not meaningful.
+
+---
+
+44. Foreign Keys
+
+Relationships must use foreign keys.
+
+Example:
+
+memberships.member_id
+        ↓
+members.id
+
+and:
+
+memberships.chama_id
+        ↓
+chamas.id
+
+Do not store relationships only as arbitrary strings.
+
+Bad:
+
+member_name = "John"
+
+Better:
+
+member_id = UUID
+
+---
+
+45. Deletion Rules
+
+Do not cascade-delete financial history accidentally.
+
+For example, deleting a membership should not silently delete:
+
+Contributions
+Loans
+Repayments
+Payments
+Ledger Entries
+
+Financial history must remain traceable.
+
+Where a member leaves a Chama, prefer:
+
+membership.status = EXITED
+
+rather than deleting the historical membership.
+
+---
+
+46. V1 Implementation Rule
+
+The team will implement the system version by version.
+
+For V1:
+
+Implement models
+      ↓
+Create migration
+      ↓
+Create tables
+      ↓
+Build repositories/services
+      ↓
+Build API
+      ↓
+Test
+      ↓
+Complete V1
+
+Then V2:
+
+Add V2 models
+      ↓
+Create migration
+      ↓
+Implement V2
+      ↓
+Test
+
+Then V3, V4, etc.
+
+---
+
+47. Models Can Be Prepared Early
+
+It is acceptable to define future SQLAlchemy models in the source tree so developers understand the complete domain.
+
+However:
+
+Model exists in Python
+
+does NOT automatically mean:
+
+Table exists in database
+
+Future tables should not be migrated until their roadmap version is active.
+
+---
+
+48. Database Reset During Development
+
+Because SQLite is being used during development, developers may reset the database when appropriate.
+
+Example:
+
+rm chamacore.db
+alembic upgrade head
+
+This is acceptable for local development.
+
+It is not acceptable for staging or production.
+
+---
+
+49. Migration Rules
+
+Every schema change must have an Alembic migration.
+
+Example:
+
+alembic revision --autogenerate -m "create members and memberships"
+
+Then:
+
+alembic upgrade head
+
+Developers must review generated migrations instead of blindly trusting "--autogenerate".
+
+---
+
+50. V1 Database Tables
+
+Only these tables are required initially:
+
+users
+chamas
+members
+memberships
+roles
+membership_roles
+contributions
+shares
+
+The V1 database should therefore remain small and understandable.
+
+---
+
+51. Version → Database Mapping
+
+Version| Database Scope
+V1| "users", "chamas", "members", "memberships", "roles", "membership_roles", "contributions", "shares"
+V2| "loans", "loan_repayments", "payouts", "ledger_accounts", "ledger_entries"
+V3| "payments", "payment_attempts", "provider_transactions", "provider_callbacks"
+V4| Jenga-related provider data uses V3 payment infrastructure
+V5| Reconciliation improvements and reliability
+V6| KCB BUNI provider implementation
+V7| NCBA provider implementation
+V8| Daraja provider implementation
+V9| "bank_accounts", "bank_transactions", "reconciliation_records"
+V10| "audit_logs" and reporting structures
+V11| "notifications"
+V12+| Application-facing changes; database changes only where required
+
+---
+
+52. Database Definition of Done
+
+A database feature is complete when:
+
+- [ ] SQLAlchemy model is defined.
+- [ ] Relationships are defined.
+- [ ] Foreign keys are defined.
+- [ ] Constraints are defined.
+- [ ] Appropriate indexes are considered.
+- [ ] Alembic migration exists.
+- [ ] Migration has been reviewed.
+- [ ] CRUD behavior is tested where applicable.
+- [ ] Business rules are tested.
+- [ ] Financial behavior is tested where applicable.
+- [ ] SQLite development behavior is verified.
+- [ ] PostgreSQL compatibility has been considered.
+- [ ] Documentation is updated.
+
+---
+
+53. Final Database Architecture Principle
+
+«Design the domain completely, implement it incrementally.»
+
+We do not need to build every database feature today.
+
+We do need to understand today how:
+
+Member
+Membership
+Contribution
+Share
+Loan
+Payment
+Provider Transaction
+Bank Transaction
+Reconciliation
+Ledger
+
+will eventually relate to one another.
+
+This prevents V1 from becoming a dead-end design while keeping the actual implementation focused.
+
+---
+
+54. Most Important Identity Rule
+
+«A Member is a person. A Membership is that person's relationship with a Chama.»
+
+Therefore:
+
+Member
+ ├── full_name
+ ├── phone_number
+ └── id_number
+
+Membership
+ ├── chama_id
+ ├── member_id
+ ├── member_number
+ ├── status
+ └── joined_at
+
+Example:
+
+Person:
+John Kamau
+0712345678
+12345678
+
+Chama:
+NUC Students Welfare Chama
+NUCSA
+
+Membership:
+NUCSA001
+
+The system generates:
+
+NUCSA001
+
+The member does not choose it.
+
+This distinction must remain intact throughout the entire ChamaCore architecture.
