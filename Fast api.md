@@ -1,4 +1,3 @@
-Absolutely. If we're switching the Chama API to FastAPI, let's keep it simple and buildable.
 
 Chama REST API with FastAPI
 
@@ -119,4 +118,3 @@ DELETE /api/v1/chamas/{id}
 
 Once that works, we move to Members → Contributions → Payouts → Balance.
 
-This is actually a good FastAPI project because you'll learn Python backend development, REST design, database relationships, validation, migrations, and API documentation in one manageable project.
