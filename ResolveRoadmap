@@ -1,0 +1,358 @@
+Yes. The SDLC currently has the roadmap defined twice:
+
+1. Version Roadmap — defines V1, V2, V3…
+
+
+2. SDLC Applied to Each Version — repeats the same version progression.
+
+
+
+The clean solution is to keep one authoritative roadmap and make the SDLC section explain how each version passes through the SDLC, without redefining the versions.
+
+Resolved structure
+
+## 22. Version Roadmap
+
+The project evolves incrementally. Each version must solve a real problem and
+must pass through the SDLC before being considered complete.
+
+| Version | Scope | Goal |
+|---|---|---|
+| V1 | Chama Foundation | Chamas, members, memberships, roles, registration fees, contributions, shares |
+| V2 | Financial Management | Loans, loan repayments, payouts, ledger |
+| V3 | Payment Architecture | Payment domain, attempts, provider transactions, callbacks, provider abstraction |
+| V4 | Jenga + M-Pesa | M-Pesa STK payments through Jenga |
+| V5 | Payment Reliability | Webhooks, reconciliation, idempotency, transaction verification |
+| V6 | KCB BUNI | KCB BUNI payment integration |
+| V7 | NCBA | NCBA payment and collection integration |
+| V8 | Daraja | Direct Safaricom M-Pesa integration where required |
+| V9 | Bank Reconciliation | Bank transactions, reconciliation records, account synchronization |
+| V10 | Reporting & Audit | Statements, reports, audit trails |
+| V11 | Notifications | SMS, email, payment and financial notifications |
+| V12 | Web Application | React web application |
+| V13 | Mobile Application | React Native application |
+| V14 | USSD | USSD access for core member operations |
+| V15 | Production Hardening | Security, performance, observability, backups, recovery and operational improvements |
+| V16+ | Product Evolution | Features driven by real users and validated requirements |
+
+### Versioning Rule
+
+A version is not considered complete merely because its code has been written.
+
+Each version must:
+
+1. Define the problem being solved.
+2. Define functional and non-functional requirements.
+3. Analyze the affected business/domain processes.
+4. Update the domain and database model where necessary.
+5. Define or update API contracts.
+6. Implement the required functionality.
+7. Add automated tests.
+8. Validate financial correctness where applicable.
+9. Apply security and authorization requirements.
+10. Deploy to the appropriate environment.
+11. Monitor the implementation.
+12. Collect feedback.
+13. Fix discovered defects before moving to the next version.
+
+---
+
+## 23. Applying the SDLC to Versions
+
+The SDLC is applied repeatedly to every version.
+
+The version roadmap above defines **what we build**.
+
+The SDLC defines **how we build it**.
+
+For example:
+
+```text
+V1
+ │
+ ├── Problem Definition
+ ├── Requirements
+ ├── System Analysis
+ ├── Domain & Data Design
+ ├── Architecture Design
+ ├── API Design
+ ├── Implementation
+ ├── Testing
+ ├── Security
+ ├── Deployment
+ ├── Monitoring
+ └── Feedback
+          │
+          ▼
+        V2
+          │
+          ├── Problem Definition
+          ├── Requirements
+          ├── System Analysis
+          ├── Design
+          ├── Implementation
+          ├── Testing
+          ├── Deployment
+          └── Feedback
+                  │
+                  ▼
+                 V3
+                  │
+                 ...
+
+Each version therefore represents a development cycle, not merely a collection of features.
+
+Example: V1
+
+V1 focuses on the Chama foundation:
+
+Chama creation
+
+Members
+
+Memberships
+
+Roles
+
+Registration fees
+
+Contributions
+
+Shares
+
+
+Before implementation, we must understand the business rules governing membership, contributions, registration fees and shares.
+
+The resulting domain model, database schema, API contracts and tests must reflect those rules.
+
+Example: V3
+
+V3 introduces the payment architecture:
+
+Payment
+
+PaymentAttempt
+
+ProviderTransaction
+
+ProviderCallback
+
+Payment provider interface
+
+Provider resolver
+
+Payment verification
+
+Idempotency
+
+
+This version establishes the internal payment model before multiple external providers are integrated.
+
+Example: V4+
+
+Provider integrations are then introduced incrementally:
+
+V4 → Jenga + M-Pesa
+V5 → Webhooks + reconciliation + idempotency
+V6 → KCB BUNI
+V7 → NCBA
+V8 → Daraja
+V9 → Bank reconciliation
+
+This prevents external provider requirements from dictating the entire internal architecture.
+
+
+---
+
+24. Evolution of Architecture
+
+The initial architecture is intentionally a modular monolith:
+
+React / React Native
+        │
+        ▼
+     FastAPI
+        │
+        ├── Chama Domain
+        ├── Member Domain
+        ├── Contribution Domain
+        ├── Loan Domain
+        ├── Payment Service
+        ├── Bank Service
+        ├── Reconciliation
+        └── Ledger
+        │
+        ▼
+   PostgreSQL
+
+External payment and banking systems are accessed through provider abstractions:
+
+Payment Service
+      │
+      ▼
+Provider Resolver
+      │
+      ├── Jenga
+      ├── KCB BUNI
+      ├── NCBA
+      └── Daraja
+
+The architecture may evolve as the product grows.
+
+Microservices, queues, event streaming, separate services or other distributed architecture should only be introduced when real requirements justify them.
+
+Architecture evolution must therefore be driven by:
+
+Scale
+
+Reliability requirements
+
+Team size
+
+Operational requirements
+
+Provider integration complexity
+
+Performance requirements
+
+Deployment requirements
+
+Clear domain boundaries
+
+
+Not by technology fashion.
+
+
+---
+
+25. Definition of Done
+
+A feature or version is complete only when:
+
+[ ] Requirements are defined.
+
+[ ] Business rules are understood.
+
+[ ] Domain model is correct.
+
+[ ] Database changes are implemented through migrations.
+
+[ ] API contracts are defined.
+
+[ ] Authorization rules are implemented.
+
+[ ] Automated tests pass.
+
+[ ] Financial invariants are tested where applicable.
+
+[ ] External integrations are tested against sandbox/test environments where available.
+
+[ ] Webhooks/callbacks are verified and idempotent where applicable.
+
+[ ] Audit requirements are implemented.
+
+[ ] Documentation is updated.
+
+[ ] Deployment succeeds.
+
+[ ] Monitoring/logging is available.
+
+[ ] Feedback has been collected where applicable.
+
+[ ] Known critical defects are resolved.
+
+
+
+---
+
+26. Most Important Financial Rule
+
+Financial data must be traceable.
+
+For every contribution or payment, the system should be able to answer:
+
+> Who contributed what, when, through which payment mechanism, what external transaction confirmed it, and how was it reflected in the Chama's financial records?
+
+
+
+The system must therefore distinguish between:
+
+Contribution
+     │
+     ▼
+Payment
+     │
+     ▼
+Payment Attempt
+     │
+     ▼
+Provider Transaction
+     │
+     ▼
+Ledger Entry
+
+Bank-side reconciliation is a separate process:
+
+Bank Account
+     │
+     ▼
+Bank Transaction
+     │
+     ▼
+Reconciliation Record
+     │
+     ▼
+Ledger Entry
+
+Successful financial transactions should not simply be deleted. Corrections should use appropriate reversal, refund or adjustment mechanisms.
+
+
+---
+
+27. Current Development Target
+
+The immediate development target is:
+
+V1 — Chama Foundation
+
+Chama
+ ├── Members
+ ├── Memberships
+ ├── Roles
+ ├── Registration Fees
+ ├── Contributions
+ └── Shares
+
+The implementation should remain focused on V1 until its requirements, domain rules, database model, APIs and tests are sufficiently stable.
+
+Do not implement future payment-provider integrations prematurely.
+
+
+---
+
+28. Project Development Rule
+
+> Build only what the current version requires, but design the boundaries so future versions can be added without rewriting the core system.
+
+
+
+This means:
+
+Do not build microservices before they are needed.
+
+Do not integrate every payment provider at once.
+
+Do not add Kafka/event streaming without a real requirement.
+
+Do not couple the Chama domain directly to a payment provider.
+
+Do not treat financial balances as arbitrary mutable values.
+
+Do not sacrifice correctness for development speed.
+
+Do not build features without validated requirements.
+
+
+The architecture should be simple enough for the current product and structured enough to evolve safely.
+
+**Result:** there is now only one place that defines the roadmap. The following section references that roadmap and explains the SDLC lifecycle rather than creating a second competing version list.
