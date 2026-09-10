@@ -1,0 +1,1635 @@
+
+
+Developer and AI Coding Instructions
+
+Project: ChamaCore
+Backend: FastAPI
+ORM: SQLAlchemy 2.x
+Development Database: SQLite
+Production Database: PostgreSQL
+Migrations: Alembic
+Architecture: Modular Monolith
+API Style: REST
+Project Status: Versioned development
+
+---
+
+1. PURPOSE OF THIS FILE
+
+This file defines how a junior developer or AI coding assistant must work inside the ChamaCore repository.
+
+ChamaCore is a financial and membership management platform.
+
+The system must therefore prioritize:
+
+1. Correctness
+2. Financial integrity
+3. Security
+4. Data consistency
+5. Maintainability
+6. Clear domain boundaries
+7. Explicit business rules
+8. Testability
+
+This is not a vibe-coding project.
+
+Do not generate code simply because a feature sounds obvious.
+
+Before implementing anything:
+
+Understand
+    ↓
+Check documentation
+    ↓
+Check existing models
+    ↓
+Check relationships
+    ↓
+Check business rules
+    ↓
+Check current version
+    ↓
+Design
+    ↓
+Implement
+    ↓
+Test
+    ↓
+Write report
+
+---
+
+2. SOURCE OF TRUTH HIERARCHY
+
+When information conflicts, use this order of authority:
+
+1. Explicit project requirements
+2. RULES.md
+3. DATABASE.md
+4. SDLC.md
+5. Current version specification/report
+6. Existing tested implementation
+7. Existing code comments
+8. Developer assumptions
+9. LLM-generated assumptions
+
+Never invent a business rule when the project documentation does not define one.
+
+If a requirement is unclear:
+
+STOP
+↓
+Identify ambiguity
+↓
+Document it
+↓
+Ask for clarification
+
+Do not silently decide.
+
+---
+
+3. REQUIRED FILES TO READ BEFORE CODING
+
+A developer must read these files before implementing a feature:
+
+LLM.md
+RULES.md
+SDLC.md
+DATABASE.md
+README.md
+
+Then inspect the relevant source code.
+
+For database-related work, always inspect:
+
+app/models/
+app/schemas/
+app/services/
+app/api/
+alembic/
+tests/
+
+Do not begin coding based only on the user's latest prompt.
+
+---
+
+4. PROJECT DOCUMENTATION MAP
+
+The repository should maintain the following documentation:
+
+/
+├── README.md
+├── LLM.md
+├── RULES.md
+├── SDLC.md
+├── DATABASE.md
+│
+├── docs/
+│   ├── architecture/
+│   ├── domain/
+│   ├── api/
+│   ├── versions/
+│   │   ├── V1.md
+│   │   ├── V2.md
+│   │   ├── V3.md
+│   │   └── ...
+│   │
+│   ├── reports/
+│   │   ├── V1_REPORT.md
+│   │   ├── V2_REPORT.md
+│   │   ├── V3_REPORT.md
+│   │   └── ...
+│   │
+│   └── decisions/
+│       ├── ADR-001-*.md
+│       └── ...
+
+The exact directory names may change, but the principle must remain.
+
+---
+
+5. THE MOST IMPORTANT RULE
+
+NEVER CODE A MODEL FROM MEMORY
+
+Before modifying or creating a SQLAlchemy model:
+
+Read DATABASE.md
+        ↓
+Read current version document
+        ↓
+Inspect related models
+        ↓
+Understand relationships
+        ↓
+Understand ownership
+        ↓
+Understand lifecycle
+        ↓
+Implement
+
+A model is not merely a collection of fields.
+
+A model represents a domain concept.
+
+For example:
+
+Member
+
+does NOT mean:
+
+someone who belongs to a Chama
+
+The domain distinction is:
+
+Member
+    =
+Person identity
+
+Membership
+    =
+That person's relationship with a specific Chama
+
+Therefore:
+
+Member
+ ├── identity
+ │    ├── full_name
+ │    ├── phone_number
+ │    └── id_number
+ │
+ └── memberships
+       ├── Chama A
+       └── Chama B
+
+Never collapse these concepts simply because doing so produces less code.
+
+---
+
+6. DATABASE MODELING PRINCIPLES
+
+6.1 Identity vs Membership
+
+A "Member" represents a person.
+
+A "Membership" represents that person's membership in a specific Chama.
+
+Therefore financial and Chama-specific records should normally reference:
+
+Membership
+
+not:
+
+Member
+
+Example:
+
+Member
+    John Kamau
+         │
+         ├── Membership
+         │      Chama: NUCSWG
+         │      Number: NUCSWG001
+         │
+         └── Membership
+                Chama: Another Chama
+                Number: OTHER001
+
+---
+
+7. MEMBERSHIP NUMBER RULE
+
+A membership number belongs to a membership.
+
+Use:
+
+membership.membership_number
+
+or the project's established equivalent.
+
+Do not put the Chama-specific member number on "Member".
+
+Example:
+
+Member:
+    John Kamau
+
+Membership:
+    Chama: NUCSWG
+    Membership Number: NUCSWG001
+
+Never generate numbers using:
+
+count + 1
+
+This is unsafe.
+
+The system must use the approved sequence/counter mechanism.
+
+Never reuse an old membership number after a membership has been terminated.
+
+---
+
+8. SQLALCHEMY RULES
+
+Use modern SQLAlchemy 2.x syntax.
+
+Preferred:
+
+class Member(Base):
+    __tablename__ = "members"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid4,
+    )
+
+    full_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+Do not introduce legacy patterns such as:
+
+Column(...)
+
+when writing new models.
+
+Use:
+
+Mapped
+mapped_column
+relationship
+ForeignKey
+UniqueConstraint
+Index
+
+appropriately.
+
+---
+
+9. MODEL CHECKLIST
+
+Before creating or changing a model, answer:
+
+Identity
+
+- What does this entity represent?
+- Is it a person?
+- A relationship?
+- A financial event?
+- A configuration?
+- An external provider event?
+
+Ownership
+
+- Who owns this record?
+- Chama?
+- Membership?
+- User?
+- Provider?
+- System?
+
+Relationships
+
+- What does it belong to?
+- What belongs to it?
+- Is the relationship one-to-one?
+- One-to-many?
+- Many-to-many?
+
+Lifecycle
+
+- How is it created?
+- Can it be updated?
+- Can it be deleted?
+- Can it be cancelled?
+- Can it be reversed?
+
+Integrity
+
+- Which fields are required?
+- Which fields must be unique?
+- Which fields can be null?
+- What foreign keys are required?
+- What constraints are required?
+
+Financial impact
+
+If the entity contains money:
+
+- What does the amount represent?
+- What currency is used?
+- Who owns the money?
+- Can it be reversed?
+- What financial record will eventually represent it?
+
+If these questions cannot be answered, do not blindly implement the model.
+
+---
+
+10. MONEY RULES
+
+Never use floating-point values for financial amounts.
+
+Never:
+
+amount: float
+
+Use:
+
+Decimal
+
+and a database numeric type such as:
+
+Numeric(14, 2)
+
+Example:
+
+amount: Mapped[Decimal] = mapped_column(
+    Numeric(14, 2),
+    nullable=False,
+)
+
+Money must not be manipulated using binary floating-point arithmetic.
+
+---
+
+11. UUID RULE
+
+Internal database identifiers should use UUIDs where defined by "DATABASE.md".
+
+Do not expose assumptions such as:
+
+member_id = 1
+member_id = 2
+member_id = 3
+
+as the application's domain identity.
+
+Human-readable identifiers and internal identifiers are separate concepts.
+
+Example:
+
+Internal ID:
+550e8400-e29b-41d4-a716-446655440000
+
+Human identifier:
+NUCSWG001
+
+---
+
+12. SQLITE DEVELOPMENT RULES
+
+SQLite is the development database.
+
+This is intentional.
+
+During development:
+
+Fast iteration
+Schema changes
+Breaking changes
+Testing
+Local experimentation
+
+are expected.
+
+However:
+
+SQLite ≠ PostgreSQL
+
+Do not assume every PostgreSQL behavior exists identically in SQLite.
+
+Avoid unnecessary database-specific SQL.
+
+Foreign-key enforcement must be enabled during SQLite testing.
+
+Production compatibility must eventually be tested against PostgreSQL.
+
+---
+
+13. MIGRATION RULES
+
+Every schema change must go through Alembic.
+
+Never manually modify a database schema and consider the work complete.
+
+Never rewrite an already-applied migration to change history.
+
+Correct approach:
+
+Existing migration
+        ↓
+New requirement
+        ↓
+New Alembic migration
+
+not:
+
+Existing migration
+        ↓
+Edit old migration
+
+---
+
+14. FUTURE MODELS
+
+ChamaCore is designed ahead of the current version.
+
+Future models may be defined before their version becomes active.
+
+For example:
+
+V1
+├── Chama
+├── Member
+├── Membership
+├── Role
+├── MembershipRole
+├── Contribution
+└── Share
+
+V2
+├── Loan
+├── LoanRepayment
+├── Payout
+└── Ledger
+
+V3
+├── Payment
+├── PaymentAttempt
+├── ProviderTransaction
+└── ProviderCallback
+
+Defining future models does NOT mean their database tables should immediately be created.
+
+The active version controls what is migrated.
+
+---
+
+15. DO NOT IMPLEMENT FUTURE FEATURES EARLY
+
+Knowing that V8 will contain Daraja does not mean a V1 developer should implement Daraja.
+
+Knowing that V9 will contain bank reconciliation does not mean V1 should contain bank transaction tables.
+
+Follow:
+
+Current Version
+       ↓
+Current Requirements
+       ↓
+Current Implementation
+
+Design boundaries for the future without prematurely implementing the future.
+
+---
+
+16. VERSION DISCIPLINE
+
+Every feature belongs to a version.
+
+Current roadmap:
+
+V1  Chama foundation
+V2  Financial management
+V3  Payment architecture
+V4  Jenga + M-Pesa STK
+V5  Webhooks + reconciliation + idempotency
+V6  KCB BUNI
+V7  NCBA
+V8  Daraja
+V9  Bank reconciliation
+V10 Reports + statements + audit
+V11 Notifications
+V12 React Web
+V13 React Native
+V14 USSD
+V15 Production hardening
+
+Do not move functionality between versions without documenting the decision.
+
+---
+
+17. V1 IMPLEMENTATION BOUNDARY
+
+V1 consists of:
+
+Chama
+Members
+Memberships
+Roles
+Registration Fees
+Contributions
+Shares
+
+V1 must answer:
+
+Who is the person?
+Who belongs to which Chama?
+What is their membership number?
+What role do they have?
+What registration fee applies?
+What contributions have been recorded?
+What shares have been recorded?
+
+V1 does NOT need:
+
+M-Pesa STK
+Bank APIs
+Loans
+Loan repayments
+Ledger
+Jenga
+KCB BUNI
+NCBA
+Daraja
+Bank reconciliation
+React
+React Native
+USSD
+
+---
+
+18. FINANCIAL DATA RULE
+
+Financial records are special.
+
+Never casually:
+
+DELETE contribution
+UPDATE historical amount
+overwrite transaction
+
+If a financial record is wrong, the correct future mechanism may involve:
+
+reversal
+adjustment
+refund
+correction
+audit record
+
+Do not invent the exact correction mechanism.
+
+Follow the financial design in the applicable version.
+
+---
+
+19. PAYMENT RULE
+
+Never assume:
+
+User says payment succeeded
+        =
+Payment succeeded
+
+Payment success must eventually be established using trusted provider information.
+
+The planned architecture is:
+
+Member
+   ↓
+Contribution
+   ↓
+Payment
+   ↓
+PaymentAttempt
+   ↓
+ProviderTransaction
+   ↓
+LedgerEntry
+
+Provider-specific implementations must remain behind the provider abstraction.
+
+---
+
+20. IDEMPOTENCY RULE
+
+External financial events can arrive more than once.
+
+For example:
+
+Payment callback
+Payment callback
+Payment callback
+
+The system must not create three financial transactions.
+
+Provider transactions should have an appropriate uniqueness rule such as:
+
+(provider, provider_transaction_id)
+
+being unique.
+
+Never implement callback processing as:
+
+create_transaction()
+
+without checking whether that transaction has already been processed.
+
+---
+
+21. API RULES
+
+Do not expose SQLAlchemy models directly from API endpoints.
+
+Use:
+
+SQLAlchemy Model
+        ↓
+Service / Domain Logic
+        ↓
+Pydantic Schema
+        ↓
+API Response
+
+Input:
+
+HTTP Request
+    ↓
+Pydantic validation
+    ↓
+Service
+    ↓
+Database
+
+Output:
+
+Database
+    ↓
+Service
+    ↓
+Pydantic response schema
+    ↓
+HTTP Response
+
+---
+
+22. AUTHENTICATION VS AUTHORIZATION
+
+Authentication answers:
+
+«Who are you?»
+
+Authorization answers:
+
+«What are you allowed to do?»
+
+Never confuse them.
+
+Example:
+
+A logged-in Chama member does not automatically have permission to:
+
+change another member's role
+approve a loan
+manage Chama finances
+
+Authorization must consider:
+
+User
+Membership
+Chama
+Role
+Action
+
+---
+
+23. CHAMA OWNERSHIP
+
+Most Chama-specific operations must establish the relevant Chama context.
+
+Do not allow:
+
+User A from Chama A
+        ↓
+access records belonging to Chama B
+
+Every relevant query and service must respect Chama boundaries.
+
+---
+
+24. DO NOT TRUST CLIENT DATA
+
+Never trust a client to provide authoritative financial or ownership information.
+
+For example, do not blindly accept:
+
+{
+    "chama_id": "...",
+    "membership_id": "...",
+    "amount": 50000,
+    "role": "TREASURER"
+}
+
+without verifying that the authenticated user is actually authorized to perform the operation.
+
+The server determines authoritative ownership and permissions.
+
+---
+
+25. SERVICES VS ROUTES
+
+Routes should not contain large amounts of business logic.
+
+Avoid:
+
+Route
+ ├── validation
+ ├── authorization
+ ├── business rules
+ ├── database manipulation
+ ├── calculations
+ └── response formatting
+
+Prefer:
+
+API Route
+    ↓
+Schema validation
+    ↓
+Service
+    ↓
+Repository / ORM
+
+The service layer should contain meaningful business operations.
+
+---
+
+26. DO NOT OVER-ENGINEER
+
+Do not introduce:
+
+Kafka
+RabbitMQ
+Redis
+Kubernetes
+gRPC
+Microservices
+Service mesh
+Event sourcing
+CQRS
+
+unless the current requirements justify them.
+
+ChamaCore currently uses:
+
+FastAPI
+SQLAlchemy
+SQLite/PostgreSQL
+Alembic
+REST
+Modular Monolith
+
+Complexity must have a reason.
+
+---
+
+27. TEST BEFORE CLAIMING COMPLETION
+
+A feature is not complete because:
+
+the code compiles
+
+or:
+
+the endpoint returns 200
+
+Tests should verify:
+
+Happy path
+Invalid input
+Authorization
+Duplicate records
+Boundary cases
+Database constraints
+Business rules
+Failure handling
+
+Financial functionality requires stronger testing.
+
+---
+
+28. MODEL-FIRST DEVELOPMENT
+
+For domain-heavy features, use this sequence:
+
+Requirement
+     ↓
+Domain concept
+     ↓
+Entity
+     ↓
+Relationships
+     ↓
+Constraints
+     ↓
+SQLAlchemy model
+     ↓
+Migration
+     ↓
+Pydantic schema
+     ↓
+Service
+     ↓
+API
+     ↓
+Tests
+
+Do not start by writing endpoints.
+
+---
+
+29. NEVER PATCH A SYMPTOM WITHOUT UNDERSTANDING THE CAUSE
+
+Bad approach:
+
+Error
+ ↓
+Add random field
+ ↓
+Add random condition
+ ↓
+Try again
+
+Correct approach:
+
+Error
+ ↓
+Reproduce
+ ↓
+Understand
+ ↓
+Locate root cause
+ ↓
+Check domain model
+ ↓
+Fix correct layer
+ ↓
+Test regression
+
+---
+
+30. WHEN USING AN AI CODING ASSISTANT
+
+The AI must NOT be treated as the authority.
+
+The developer remains responsible for:
+
+requirements
+architecture
+security
+business rules
+database integrity
+financial correctness
+
+Before asking an AI to implement something, provide:
+
+Current version
+Relevant requirements
+Relevant models
+Relevant business rules
+Relevant API contract
+Expected behavior
+Tests
+
+Good prompt:
+
+Implement V1 member registration.
+
+Read:
+- LLM.md
+- RULES.md
+- DATABASE.md
+- docs/versions/V1.md
+
+The Member represents person identity.
+Membership represents membership in a Chama.
+
+Do not change the domain model.
+
+Implement:
+1. Pydantic request schema
+2. service
+3. API endpoint
+4. tests
+
+Before coding, inspect the existing models and relationships.
+
+Bad prompt:
+
+Create a member API.
+
+---
+
+31. AI MUST NOT INVENT FIELDS
+
+Do not add fields simply because they seem useful.
+
+For example, do not randomly add:
+
+age
+gender
+occupation
+location
+next_of_kin
+profile_photo
+nationality
+
+unless the requirements explicitly require them.
+
+Every field must have a reason.
+
+---
+
+32. AI MUST NOT CHANGE EXISTING DOMAIN MEANING
+
+If the project says:
+
+Member = identity
+Membership = Chama relationship
+
+the AI must not refactor it into:
+
+Member = Chama membership
+
+because it appears simpler.
+
+Existing domain decisions must be respected.
+
+---
+
+33. BEFORE MODIFYING AN EXISTING MODEL
+
+The developer must inspect:
+
+1. Model definition
+2. Related models
+3. Alembic migrations
+4. Pydantic schemas
+5. Services
+6. API endpoints
+7. Tests
+
+Then determine the impact.
+
+A database model change can affect:
+
+Database
+API
+Business logic
+Frontend
+Tests
+Reports
+Future integrations
+
+---
+
+34. VERSION REPORT REQUIREMENT
+
+Every completed version MUST produce a report.
+
+Reports belong in:
+
+docs/reports/
+
+Example:
+
+V1_REPORT.md
+V2_REPORT.md
+V3_REPORT.md
+
+The report is mandatory.
+
+No version is considered fully complete until its report has been written.
+
+---
+
+35. VERSION REPORT TEMPLATE
+
+Every version report must contain:
+
+# ChamaCore V{VERSION} Completion Report
+
+## 1. Version
+
+## 2. Objective
+
+## 3. Scope
+
+## 4. Requirements Implemented
+
+## 5. Database Changes
+
+## 6. Models Added
+
+## 7. Models Modified
+
+## 8. API Endpoints Added
+
+## 9. Business Rules Implemented
+
+## 10. Authorization Rules
+
+## 11. Migrations
+
+## 12. Tests
+
+## 13. Security Considerations
+
+## 14. Known Limitations
+
+## 15. Decisions Made
+
+## 16. Problems Encountered
+
+## 17. How Problems Were Solved
+
+## 18. Files Changed
+
+## 19. Future Work
+
+## 20. Definition of Done
+
+## 21. Verification
+
+## 22. Final Status
+
+---
+
+36. REPORT MUST BE FACTUAL
+
+Never write:
+
+Everything works perfectly.
+
+unless it has actually been verified.
+
+Instead:
+
+Implemented:
+- Member registration
+- Membership creation
+- Membership number generation
+
+Verified:
+- Unit tests pass
+- Integration tests pass
+
+Known limitation:
+- PostgreSQL integration testing is pending
+
+Reports must describe reality.
+
+---
+
+37. VERSION HANDOVER PROCESS
+
+When finishing a version:
+
+Implementation
+     ↓
+Tests
+     ↓
+Migration verification
+     ↓
+Security review
+     ↓
+Documentation update
+     ↓
+Version report
+     ↓
+Git commit
+     ↓
+Handover
+
+The next developer should be able to understand what happened without asking the original developer to explain everything.
+
+---
+
+38. HANDOVER REQUIREMENT
+
+At the end of every version, the developer must leave:
+
+What was built
+What was changed
+Why it was changed
+What was tested
+What failed
+What remains
+What assumptions were made
+What decisions were made
+What the next version should do
+
+---
+
+39. CHANGE REPORT
+
+For significant changes, record:
+
+Before
+After
+Reason
+Impact
+Tests
+Migration
+
+Example:
+
+Before:
+membership number stored on Member
+
+After:
+membership number stored on Membership
+
+Reason:
+The number identifies a person's membership in a specific Chama.
+
+Impact:
+Membership-related records now use Membership ownership.
+
+Tests:
+Registration and uniqueness tests updated.
+
+---
+
+40. ARCHITECTURAL DECISIONS
+
+Significant architectural decisions should be recorded as ADRs.
+
+Example:
+
+docs/decisions/ADR-001-modular-monolith.md
+docs/decisions/ADR-002-member-membership-separation.md
+docs/decisions/ADR-003-sqlite-development-postgresql-production.md
+
+An ADR should explain:
+
+Context
+Decision
+Alternatives
+Reason
+Consequences
+
+---
+
+41. GIT RULES
+
+Do not make giant unexplained commits.
+
+Prefer focused commits:
+
+feat(v1): add member model
+feat(v1): add membership registration
+feat(v1): add role assignment
+test(v1): add membership registration tests
+fix(v1): prevent duplicate membership numbers
+docs(v1): add completion report
+
+Avoid:
+
+final changes
+updates
+stuff
+fix
+working now
+
+---
+
+42. NEVER DELETE WORK TO MAKE ERRORS DISAPPEAR
+
+If a test fails:
+
+Do not:
+
+delete test
+remove validation
+disable constraint
+comment out code
+
+just to make the build pass.
+
+Fix the underlying problem or document why the expected behavior is wrong.
+
+---
+
+43. DATABASE RESET DURING DEVELOPMENT
+
+Because SQLite is the development database, resetting the local database may be acceptable during early development when the schema is intentionally changing.
+
+However:
+
+Deleting SQLite locally
+≠
+Deleting production data
+
+Never apply development shortcuts to production.
+
+---
+
+44. SECRETS
+
+Never commit:
+
+API keys
+Passwords
+JWT secrets
+Bank credentials
+M-Pesa credentials
+Provider secrets
+Database passwords
+
+Use environment variables.
+
+Never place real credentials in:
+
+README.md
+LLM.md
+RULES.md
+DATABASE.md
+source code
+tests
+
+---
+
+45. EXTERNAL PROVIDERS
+
+Payment and banking providers must be isolated behind interfaces.
+
+Planned architecture:
+
+PaymentProvider
+├── JengaPaymentProvider
+├── KCBPaymentProvider
+├── NCBAPaymentProvider
+└── DarajaPaymentProvider
+
+Do not scatter provider-specific code throughout:
+
+routes
+models
+services
+
+Provider implementation belongs in the integration layer.
+
+---
+
+46. PROVIDER DATA MUST BE NORMALIZED
+
+External providers may use different names.
+
+For example:
+
+Provider A:
+transaction_id
+
+Provider B:
+receipt_number
+
+Provider C:
+reference
+
+Provider D:
+external_id
+
+ChamaCore should normalize external information into its own domain model.
+
+Do not allow the entire application to depend on provider-specific terminology.
+
+---
+
+47. WHAT THE DEVELOPER SHOULD DO WHEN CONFUSED
+
+If confused about a requirement:
+
+DO NOT GUESS.
+
+Use this procedure:
+
+1. Search documentation.
+2. Inspect existing implementation.
+3. Check DATABASE.md.
+4. Check RULES.md.
+5. Check current version.
+6. Identify the exact ambiguity.
+7. Ask for clarification.
+
+A question is better than silently corrupting the domain model.
+
+---
+
+48. DEFINITION OF DONE
+
+A feature is complete only when:
+
+[ ] Requirement understood
+[ ] Current version confirmed
+[ ] Domain model understood
+[ ] Existing models inspected
+[ ] Relationships verified
+[ ] Database constraints implemented
+[ ] Migration created
+[ ] Pydantic schemas implemented
+[ ] Business logic implemented
+[ ] Authorization implemented
+[ ] API implemented
+[ ] Tests written
+[ ] Tests passing
+[ ] Security reviewed
+[ ] Documentation updated
+[ ] Version report updated
+[ ] Git changes reviewed
+
+---
+
+49. VERSION COMPLETION CHECKLIST
+
+Before declaring V1 complete:
+
+[ ] Chama implemented
+[ ] Member implemented
+[ ] Membership implemented
+[ ] Role implemented
+[ ] MembershipRole implemented
+[ ] Registration fee implemented
+[ ] Contribution implemented
+[ ] Share implemented
+[ ] Membership number generation verified
+[ ] Member identity rules verified
+[ ] Chama ownership verified
+[ ] Authorization verified
+[ ] SQLite foreign keys verified
+[ ] Alembic migration verified
+[ ] API tests passing
+[ ] Model tests passing
+[ ] Business-rule tests passing
+[ ] Documentation updated
+[ ] V1_REPORT.md written
+
+Do not begin V2 until V1 passes its definition of done.
+
+---
+
+50. THE GOLDEN RULES
+
+The following rules override convenience:
+
+1. Understand before coding.
+
+2. Never invent business rules.
+
+3. Never invent model relationships.
+
+4. Member identity is different from Membership.
+
+5. Chama-specific data belongs to Membership where appropriate.
+
+6. Never generate membership numbers using COUNT + 1.
+
+7. Never use float for money.
+
+8. Never trust client-supplied financial authority.
+
+9. Never assume a payment succeeded.
+
+10. Never silently delete financial history.
+
+11. Never bypass Alembic.
+
+12. Never rewrite applied migrations.
+
+13. Never expose SQLAlchemy models directly from APIs.
+
+14. Authentication is not authorization.
+
+15. Respect Chama boundaries.
+
+16. Keep provider-specific code behind provider abstractions.
+
+17. Do not implement future versions early.
+
+18. Do not introduce unnecessary infrastructure.
+
+19. Test before declaring completion.
+
+20. Write a report after every version.
+
+21. Document significant architectural decisions.
+
+22. If uncertain, ask instead of guessing.
+
+23. The code must follow the domain, not the other way around.
+
+24. AI is an implementation assistant, not the project's source of truth.
+
+25. Correctness is more important than speed.
+
+---
+
+51. FINAL DEVELOPER PRINCIPLE
+
+ChamaCore is a financial system.
+
+A junior developer may be able to generate:
+
+FastAPI endpoint
+SQLAlchemy model
+CRUD service
+Pydantic schema
+
+in minutes.
+
+That is not the difficult part.
+
+The difficult part is making sure the generated code represents the correct business reality.
+
+Therefore:
+
+Good engineer
+    ≠
+person who writes code fastest
+
+Good engineer
+    =
+person who understands what the code is supposed to mean
+and implements it without violating the system's rules.
+
+For ChamaCore:
+
+DOMAIN FIRST
+     ↓
+MODEL SECOND
+     ↓
+BUSINESS LOGIC
+     ↓
+API
+     ↓
+TEST
+     ↓
+REPORT
+
+Never reverse this order merely because an AI can generate an endpoint quickly.
+
+---
+
+52. HANDOVER STANDARD
+
+A developer leaving the project must leave the repository in a state where another developer can continue without relying on private knowledge.
+
+The repository itself must explain:
+
+What ChamaCore is
+Why it is designed this way
+What version is active
+What has been implemented
+What has not been implemented
+What the models mean
+How models relate
+What business rules exist
+What tests exist
+What remains
+
+If knowledge exists only inside someone's head, it is considered undocumented.
+
+---
+
+53. CURRENT PROJECT STATE
+
+At the time this document was created:
+
+Architecture       → Defined
+SDLC               → Defined
+Engineering Rules  → Defined
+Database Strategy  → Defined
+V1 Domain          → Defined
+Future Roadmap     → Defined
+
+V1 Implementation  → In progress
+
+Current implementation target:
+
+FastAPI
++
+SQLAlchemy 2.x
++
+SQLite
++
+Alembic
++
+V1 Chama domain
+
+Production database:
+
+PostgreSQL
+
+Do not move beyond the active version without following the project roadmap.
+
+---
+
+54. REQUIRED END-OF-VERSION ARTIFACTS
+
+Every completed version must leave behind:
+
+Source code
+Tests
+Alembic migrations
+Updated documentation
+Version report
+Relevant ADRs
+Git history
+Known limitations
+
+The project should always be handoff-ready.
+
+---
+
+55. FINAL INSTRUCTION TO AI CODING AGENTS
+
+Before modifying ChamaCore, ask yourself:
+
+What version am I implementing?
+
+What requirement am I implementing?
+
+What domain entity does this affect?
+
+Who owns that entity?
+
+What existing model represents it?
+
+What relationships already exist?
+
+What business rules apply?
+
+What database constraints are required?
+
+Could this change affect financial integrity?
+
+Could this change break another module?
+
+What tests prove this works?
+
+What documentation must change?
+
+Does this belong in the current version?
+
+If these questions cannot be answered from the repository:
+
+STOP.
+
+Do not guess.
+
+Read the documentation.
+
+Inspect the code.
+
+Ask for clarification where necessary.
+
+Then implement.
+
+---
+
+END OF LLM.md
