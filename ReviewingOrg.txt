@@ -1,0 +1,480 @@
+This is much better because NUCSWG gives us the actual business workflow. Now we can design the API around a real Chama instead of inventing features.
+
+And your two questions are actually the most important architectural questions in the whole system.
+
+First, model NUCSWG correctly
+
+I would understand the organization like this:
+
+NUCSWG
+│
+├── Executive
+│   ├── Chair
+│   ├── Treasurer
+│   └── Secretary
+│
+└── Members
+
+Financially:
+
+Member
+ │
+ ├── Registration Fee
+ │
+ ├── Monthly Contribution
+ │      └── Shares
+ │
+ └── Loan
+       └── Repayment
+
+And the Chama has:
+
+NUCSWG Funds
+│
+├── Bank Account
+│
+├── M-Pesa
+│
+└── Other financial sources
+
+The application is therefore not the money itself.
+
+It is a system that records and reconciles what happens to the money.
+
+
+---
+
+Your first question
+
+> If the funds are in the bank, how does the system know?
+
+
+
+It doesn't automatically know just because you have a bank account.
+
+You need some form of bank integration or bank statement reconciliation.
+
+There are several possibilities.
+
+Option 1: Manual recording
+
+The treasurer logs into the bank, sees:
+
+Bank balance:
+KSh 450,000
+
+and records/imports the information into your system.
+
+This is the easiest V1.
+
+But the application should distinguish:
+
+System balance
+vs
+Bank balance
+
+For example:
+
+System ledger       KSh 450,000
+Bank statement      KSh 450,000
+Difference          KSh 0
+
+That's reconciliation.
+
+
+---
+
+Option 2: Bank statement import
+
+The bank may provide statements in formats such as CSV/PDF/other supported formats.
+
+The treasurer could upload the statement:
+
+Bank
+ ↓
+Statement
+ ↓
+NUCSWG System
+ ↓
+Transactions
+ ↓
+Reconciliation
+
+The system can then compare bank transactions against its internal records.
+
+This is much more realistic for an early product than assuming you can connect directly to every Kenyan bank.
+
+
+---
+
+Option 3: Direct bank integration
+
+Eventually, if the bank provides an appropriate API/integration channel and the Chama is eligible, you can have:
+
+NUCSWG API
+      ↓
+Bank API
+      ↓
+Account transactions
+      ↓
+NUCSWG
+
+Then the system can periodically retrieve transactions.
+
+But don't design V1 around this assumption.
+
+Bank integrations depend on the specific bank, account type, agreements, authentication mechanisms and access they provide.
+
+
+---
+
+Now your second question
+
+> Payments are from M-Pesa and enter the bank. How will the system know?
+
+
+
+This is where we need to separate M-Pesa payment processing from bank reconciliation.
+
+Imagine:
+
+Member
+  │
+  │ KSh 5,000
+  ↓
+M-Pesa
+  │
+  ↓
+NUCSWG bank account
+
+There are potentially two different records:
+
+M-Pesa transaction
+        +
+Bank transaction
+
+Your system needs to connect them.
+
+
+---
+
+Example
+
+John is supposed to contribute:
+
+Monthly contribution = KSh 5,000
+
+John pays using M-Pesa.
+
+M-Pesa produces something like:
+
+Transaction reference: ABC123XYZ
+Amount: KSh 5,000
+Time: ...
+
+Your system receives the relevant payment information through the appropriate M-Pesa integration/callback mechanism.
+
+Then:
+
+ABC123XYZ
+       ↓
+Member John
+       ↓
+NUCSWG
+       ↓
+Contribution
+       ↓
+May 2026 contribution
+       ↓
+KSh 5,000
+
+Now the application knows:
+
+> John has paid his May contribution.
+
+
+
+Later, the money reaches the Chama's bank account.
+
+The bank might show:
+
+Credit: KSh 5,000
+Reference: ...
+
+Your system can reconcile that bank transaction against the payment/financial transaction it already recorded.
+
+
+---
+
+This reveals something important
+
+We shouldn't make:
+
+Contribution
+
+the same thing as:
+
+Bank transaction
+
+or:
+
+M-Pesa transaction
+
+They are different concepts.
+
+I'd eventually model something closer to:
+
+Member
+   │
+   ↓
+Contribution
+   │
+   ↓
+Financial Transaction
+   │
+   ├──────── M-Pesa Transaction
+   │
+   └──────── Bank Transaction
+
+This gives us traceability.
+
+
+---
+
+Think of it like this
+
+Suppose NUCSWG receives:
+
+John       KSh 5,000
+Mary       KSh 5,000
+Peter      KSh 10,000
+
+The application records:
+
+Expected/recorded contributions
+───────────────────────────────
+John       5,000
+Mary       5,000
+Peter     10,000
+───────────────────────────────
+Total     20,000
+
+Then the bank says:
+
+Bank credits
+────────────────
+ABC123     5,000
+DEF456     5,000
+GHI789    10,000
+────────────────
+Total     20,000
+
+The reconciliation engine says:
+
+System: KSh 20,000
+Bank:   KSh 20,000
+
+✓ Reconciled
+
+But suppose the bank says:
+
+Bank: KSh 15,000
+System: KSh 20,000
+
+Now:
+
+⚠ KSh 5,000 difference
+
+The treasurer investigates.
+
+That's the kind of problem our production system should solve.
+
+
+---
+
+Now let's rethink the NUCSWG API
+
+Based on your actual case, I'd change our earlier model.
+
+Core domain
+
+User
+Chama
+Membership
+Role
+Contribution
+Share
+Loan
+Loan Repayment
+Financial Transaction
+Payment
+Bank Account
+Bank Transaction
+Reconciliation
+
+Organization
+
+Chama
+   │
+   ├── Executive
+   │     ├── Chair
+   │     ├── Treasurer
+   │     └── Secretary
+   │
+   └── Members
+
+Money
+
+Member
+  │
+  ├── Registration Fee
+  ├── Contribution
+  │      └── Shares
+  │
+  └── Loan
+         └── Repayment
+
+External money movement
+
+┌── M-Pesa
+                │
+Financial Tx ───┤
+                │
+                └── Bank
+
+
+---
+
+One thing I'd change in your wording
+
+You said:
+
+> Executive creates schema
+
+
+
+I think you mean creates the Chama or creates the group's structure/configuration.
+
+"Schema" has a very specific meaning in software/database engineering, so I'd avoid using it for the Chama itself.
+
+For example:
+
+Chairperson
+   ↓
+Creates Chama
+   ↓
+Defines contribution rules
+   ↓
+Adds members
+   ↓
+Assigns roles
+
+
+---
+
+And "Funds manage" becomes its own domain
+
+This is important.
+
+The Treasurer shouldn't simply have:
+
+Balance: 500,000
+
+Instead:
+
+Financial Management
+│
+├── Bank Accounts
+│
+├── M-Pesa Payments
+│
+├── Contributions
+│
+├── Loans
+├── Loan Repayments
+├── Payouts
+├── Expenses
+└── Reconciliation
+
+Then the balance is derived from financial records, rather than being an arbitrary number someone edits.
+
+
+---
+
+What V1 should now look like
+
+With the real NUCSWG workflow, I'd make V1:
+
+NUCSWG
+ │
+ ├── Chama
+ │
+ ├── Executive
+ │
+ ├── Members
+ │
+ ├── Registration Fees
+ │
+ ├── Monthly Contributions
+ │      └── Shares
+ │
+ └── Basic Financial Records
+
+Then V2:
+
+Loans
+Loan Repayments
+
+V3:
+
+M-Pesa
+Payment Callbacks
+Transaction Matching
+
+V4:
+
+Bank Statements
+Reconciliation
+
+V5:
+
+Reports
+Statements
+Audit Logs
+
+And then React/React Native/USSD interfaces can consume the same API.
+
+
+---
+
+The key architecture we're arriving at
+
+NUCSWG USERS
+                         │
+              ┌──────────┼──────────┐
+              ↓          ↓          ↓
+            React    React Native   USSD
+              │          │          │
+              └──────────┼──────────┘
+                         ↓
+                    FastAPI REST
+                         │
+              ┌──────────┼──────────┐
+              ↓          ↓          ↓
+         PostgreSQL   M-Pesa     Bank
+              │          │          │
+              └──────────┼──────────┘
+                         ↓
+                   Reconciliation
+                         ↓
+                  Financial Ledger
+
+This is much closer to a real Chama system.
+
+And the critical principle is:
+
+> M-Pesa tells us about a payment. The bank tells us about money reaching the bank account. Our system connects those events and maintains the Chama's financial records.
+
+
+
+That distinction is going to save us from a lot of bad architecture later.
