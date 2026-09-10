@@ -1,0 +1,309 @@
+Yes. I checked the current Jenga documentation, and there is an important distinction we should build around.
+
+1. Does Jenga support a KCB Chama?
+
+Jenga's documentation says its services cover banks and mobile wallets across East and Central Africa, but individual services have different coverage. In particular, Jenga currently says its Account Services, such as balance/statements, support Equity Bank accounts, not all Kenyan banks. 
+
+However, Jenga's payment products are broader. Its documentation lists M-Pesa and Equitel as Kenyan mobile-money payment methods, while "Pay with Bank Account" is currently specifically available to Equity Bank customers. 
+
+So don't make this assumption:
+
+> "Jenga supports KCB, therefore I can use every Jenga banking API on a KCB account."
+
+
+
+No. Each Jenga service has to be checked for that bank.
+
+
+---
+
+2. The architecture I recommend for Chama
+
+For our Chama application, I'd separate payment collection from bank account services.
+
+CHAMA APP
+                        │
+                        ↓
+                   FastAPI API
+                        │
+                 Payment Service
+                        │
+                        ↓
+                    Jenga API
+                        │
+                  M-Pesa STK
+                        │
+                        ↓
+                   Member's M-Pesa
+                        │
+                     Payment
+                        ↓
+                  Jenga callback
+                        │
+                        ↓
+                    FastAPI
+                        │
+                 Chama Ledger
+
+If we use Jenga's account-based settlement, the payment can be associated with the Chama's settlement account. Jenga's current API documentation explicitly lists M-Pesa STK Push under Account Based Settlement. 
+
+So the important relationship is:
+
+STK Payment
+     ↓
+Jenga
+     ↓
+M-Pesa
+     ↓
+Settlement
+     ↓
+Chama's configured account
+
+Meanwhile your FastAPI receives the payment result and records:
+
+Member: John
+Chama: NUCSWG
+Amount: KSh 5,000
+Payment: SUCCESS
+Reference: XYZ123
+
+
+---
+
+3. Now the versions become much clearer
+
+V1: Chama Management
+
+No payment integration yet.
+
+Chama
+Members
+Executive
+Roles
+Registration
+Shares
+Contributions
+
+FastAPI + PostgreSQL.
+
+
+---
+
+V2: Financial Management
+
+Add:
+
+Contributions
+Registration fees
+Shares
+Loans
+Loan repayments
+Payouts
+Financial ledger
+Statements
+
+Still no external payment integration.
+
+
+---
+
+V3: Jenga Payments
+
+Now integrate Jenga.
+
+FastAPI
+   ↓
+Jenga
+   ↓
+M-Pesa STK
+
+Flow:
+
+Member clicks "Contribute 5,000"
+          ↓
+FastAPI creates payment
+          ↓
+Jenga STK Push
+          ↓
+Member enters M-Pesa PIN
+          ↓
+Jenga processes payment
+          ↓
+Callback
+          ↓
+FastAPI
+          ↓
+Contribution = PAID
+
+This is where the application becomes much more useful.
+
+
+---
+
+V4: Automatic reconciliation
+
+Now don't simply say:
+
+STK successful = everything is fine
+
+Store the external transaction separately:
+
+Contribution
+      │
+      └── Payment
+             │
+             ├── Provider: JENGA
+             ├── Method: MPESA
+             ├── External Reference
+             ├── Amount
+             └── Status
+
+Then you can reconcile your internal records against provider transaction information.
+
+
+---
+
+V5: Bank-side capabilities
+
+For an Equity Chama, you can investigate Jenga's account services.
+
+Jenga currently documents:
+
+Account Balance
+Mini Statement
+Full Statement
+Account Inquiry
+
+and explicitly says the account-balance service currently supports Equity Bank accounts. 
+
+That means an Equity Chama could potentially have:
+
+Jenga
+              /       \
+             ↓         ↓
+       M-Pesa STK    Equity
+                      Account
+                         ↓
+                    Balance/
+                    Statements
+
+That's powerful because now you're not just recording payments. You're able to reconcile against bank-side information where the relevant Jenga service supports the account.
+
+
+---
+
+4. What happens with KCB?
+
+This is where we make the application provider-agnostic.
+
+Don't write:
+
+Chama → Equity → Jenga
+
+into the entire application.
+
+Instead:
+
+Chama
+  ↓
+Payment Provider
+  ↓
+Jenga / Other Provider
+
+Your database can have:
+
+PaymentProvider
+----------------
+JENGA
+DARaja
+OTHER
+
+And:
+
+BankAccount
+----------------
+bankName
+accountName
+accountNumber
+bankCode
+
+Then:
+
+NUCSWG
+  │
+  └── Bank Account
+        ├── Bank: Equity
+        ├── Account: XXXXX
+        └── Provider: Jenga
+
+Another Chama:
+
+Another Chama
+  │
+  └── Bank Account
+        ├── Bank: KCB
+        ├── Account: XXXXX
+        └── Provider: ????
+
+If Jenga doesn't provide the required KCB account-service integration for that use case, we plug in another supported provider rather than rewriting the Chama system.
+
+
+---
+
+5. The really important design
+
+I would create an abstraction inside FastAPI:
+
+PaymentService
+                         │
+              ┌──────────┴──────────┐
+              ↓                     ↓
+        JengaPaymentProvider   OtherProvider
+              │
+              ↓
+          STK Push
+
+Your Chama business logic doesn't care whether the payment came through Jenga, another provider, or eventually Daraja directly.
+
+It simply receives:
+
+PAYMENT_SUCCESS
+
+and records the contribution.
+
+
+---
+
+6. One correction from our previous discussion
+
+We shouldn't necessarily integrate Jenga + Daraja separately for the same STK payment.
+
+If we're using Jenga's M-Pesa STK capability, Jenga is the payment integration layer for that flow. Jenga's docs explicitly expose M-Pesa STK Push, including account-based settlement. 
+
+So our first implementation should investigate:
+
+Chama
+ ↓
+FastAPI
+ ↓
+Jenga
+ ↓
+M-Pesa STK
+ ↓
+Jenga callback
+ ↓
+FastAPI
+ ↓
+Contribution
+
+rather than unnecessarily doing:
+
+FastAPI
+ ├── Jenga
+ └── Daraja
+
+for the exact same payment.
+
+And for KCB, we should not promise support until we verify the exact Jenga product/service coverage for KCB or identify another provider. Jenga's documentation itself warns that certain services are limited to Equity while broader services cover more institutions. 
+
+That provider abstraction will let us support **NUCSWG/Equity first without locking the entire Chama platform to Equity.**
