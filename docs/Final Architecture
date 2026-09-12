@@ -1,4 +1,4 @@
-chamacore/
+app/
 │
 ├── api/
 │   ├── auth/
