@@ -6,84 +6,64 @@
 
 ## Final verdict
 
-ChamaCore has a well-developed product and architecture design, but it is not
-yet an implemented backend.
+V1 (Chama Foundation) is implemented and its automated tests pass.
 
-The repository is currently:
+The repository is now a working backend for:
 
-- A minimal FastAPI scaffold
-- A collection of product and engineering documents
-- A planned system design
-
-It is not yet a working Chama management system, financial system, payment
-platform, or production-ready application.
+- Users and authentication
+- Chamas
+- Members and memberships
+- Roles
+- Registration fees
+- Contributions and shares
+- Authorization on every Chama-scoped query
+- Database migrations and automated tests
 
 ## Currently executable
 
-The repository exposes only:
-
 ```text
-GET /
+alembic upgrade head
+uvicorn app.main:app --reload
+pytest
 ```
 
-The response is:
-
-```json
-{"message": "Hello World"}
-```
+All 59 tests pass. Swagger docs are available at `/docs`.
 
 ## Implemented
 
-- Basic FastAPI application creation
-- Root response
-- Product vision
-- Initial domain concepts
-- Initial architecture direction
-- Initial database design
-- Development roadmap
-
-## Not implemented
-
-- Application package structure
-- Configuration management
-- SQLAlchemy models
+- Application package structure (`app/`)
+- Configuration via Pydantic settings
+- SQLAlchemy 2.x models (10 V1 tables)
 - Database sessions
-- Alembic migrations
-- SQLite or PostgreSQL setup
-- Authentication
-- Authorization
-- Chama, member, membership, role, contribution, or share endpoints
-- Tests or CI
+- Alembic migrations (initial V1 schema with role seed)
+- SQLite for development; PostgreSQL support for production
+- Authentication (register, token, me, member-link)
+- Authorization (membership-based, verified per Chama-scoped query)
+- Chama, member, membership, role, registration-fee, contribution, and
+  share endpoints
+- Server-side transactional membership numbers
+- Tests (auth, chamas, memberships, roles, registration fees,
+  contributions, membership-number concurrency)
+- Approved decisions recorded in ADRs and `docs/decisions/`
+
+## Not implemented (out of V1 scope)
+
 - Frontend
 - Payment integrations
 - Reconciliation
 - Ledger
+- Loans, loan repayments, payouts
 - Reports
 - Notifications
 - USSD
 
 ## Current milestone
 
-V1: Chama Foundation.
+V1: Chama Foundation. Complete.
 
-V1 must implement Chamas, members, memberships, roles, registration fees,
-contributions, shares, authentication, authorization, migrations, and tests.
-
-## Decisions required before model implementation
-
-- Registration-fee lifecycle
-- Contribution-period definition
-- Contribution statuses and corrections
-- Share calculation formula
-- Role assignment and removal permissions
-- Phone-number uniqueness
-- Government-ID uniqueness
-- Membership-number scope
-- Correction and deletion rules
+Future versions (V2+ in `docs/08_ROADMAP.md`) describe direction only and
+must not be implemented now.
 
 ## Official status statement
 
-> Domain and architecture designed. V1 implementation not started.
-
-V1 must not be described as complete until the acceptance criteria in
-`01_PRODUCT_REQUIREMENTS.md` pass.
+> V1 implemented. All 59 acceptance tests pass.

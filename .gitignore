@@ -9,6 +9,23 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Databases
+*.db
+*.sqlite3
+
+# Env files
+.env
+
+# Python build artifacts
+*.egg-info/
+dist/
+build/
+
+# Test and tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
 # IDEs and Tools
 .vscode/
 .idea/

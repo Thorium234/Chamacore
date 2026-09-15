@@ -17,41 +17,41 @@ The long-term system is intended to support:
 
 ## Current status
 
-ChamaCore is currently in the V1 foundation stage.
+V1 (Chama Foundation) is implemented. All 59 automated tests pass.
 
-The repository currently contains a minimal FastAPI application and product,
-domain, architecture, and database documentation. The following are not
-implemented yet:
+### Quick start
 
-- Database models or migrations
-- Authentication or authorization
-- Chama, member, membership, contribution, or share APIs
-- Payment-provider integrations
-- Frontend applications
-- Automated tests
-
-The only current executable endpoint is:
-
-```text
-GET /
+```bash
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload
+pytest
 ```
 
-It currently returns:
+API docs are available at `/docs`.
 
-```json
-{"message": "Hello World"}
-```
+### Implemented
 
-## Current implementation target
+- Users and authentication (register, token, me, claim member identity)
+- Chamas (create, view, update, status)
+- Members and memberships (create, view, update status)
+- Roles (assign and remove leadership roles)
+- Registration fees (view, waive)
+- Contributions (record, confirm, reverse)
+- Shares (created automatically on confirmation per ADR-005)
+- Authorization on every Chama-scoped query
+- Database migrations (Alembic)
+- 59 automated tests
 
-V1 is:
+### Not implemented (V2+)
 
-```text
-Chama → Member → Membership → Roles → Registration Fees → Contributions → Shares
-```
-
-Do not implement loans, payments, bank integrations, React, mobile, USSD,
-or microservices until V1 is complete and approved.
+- Loans, loan repayments, payouts
+- Ledger
+- Payments, webhooks, payment providers
+- Bank reconciliation
+- Notifications
+- React, React Native, USSD
+- Background workers, microservices
 
 ## Documentation source of truth
 
@@ -69,14 +69,13 @@ Before changing code, read:
 
 Accepted decisions are in `docs/decisions/`.
 
-## Planned technology
+## Technology
 
 - Python
 - FastAPI
 - SQLAlchemy 2.x
 - Alembic
-- SQLite for development
-- PostgreSQL for production
+- SQLite (development) / PostgreSQL (production)
 - Pydantic
 - pytest
 

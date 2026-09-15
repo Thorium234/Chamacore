@@ -1,5 +1,9 @@
 # V1 Database Specification
 
+## Status
+
+Implemented. Initial migration applied on SQLite for development.
+
 ## Strategy
 
 - Development: SQLite
@@ -33,6 +37,10 @@
 
 ## Required constraints
 
+- `users.email` is unique.
+- `members.phone_number` is unique.
+- `members.government_id` is unique.
+- `users.member_id` is unique (optional).
 - A membership references an existing member and Chama.
 - A person cannot have duplicate membership in one Chama.
 - A role assignment cannot be duplicated.

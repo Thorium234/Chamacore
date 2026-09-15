@@ -1,0 +1,1 @@
+"""Application configuration based on pydantic-settings."""

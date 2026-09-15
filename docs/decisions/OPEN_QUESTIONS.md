@@ -1,52 +1,40 @@
 # Open Questions
 
-These questions block implementation until answered.
+All questions have been resolved.
 
-## OQ-001: Registration fee lifecycle
+## Resolved
 
-What is the exact lifecycle of a registration fee?
+### OQ-001: Registration fee lifecycle
 
-Options:
+Decision: ADR-003 — Copy from Chama as OWED at membership creation.
 
-1. Copy the fee from the Chama when membership is created.
-2. Create it as an amount owed.
-3. Record it only when manually paid.
-4. Create an obligation and later link it to a payment.
+### OQ-002: Contribution period
 
-Decision: `OPEN`
+Decision: ADR-004 — Calendar month `YYYY-MM` string.
 
-## OQ-002: Contribution period
+### OQ-003: Share formula
 
-What identifies a contribution period?
+Decision: ADR-005 — `units = amount / SHARE_UNIT_PRICE` per contribution.
 
-Options:
+### OQ-004: Role rules
 
-1. Calendar month such as `2026-09`.
-2. A configured Chama period.
-3. An arbitrary label.
-4. A date range.
+Decision: ADR-006 — Default MEMBER; up to one leadership role per
+membership; one CHAIRPERSON per Chama; CHAIRPERSON manages all roles.
 
-Decision: `OPEN`
+### OQ-005: Identity uniqueness
 
-## OQ-003: Share formula
+Decision: ADR-007 — Phone and government ID globally unique.
 
-How are shares calculated from contributions?
+### OQ-006: Chama access model
 
-Decision: `OPEN`
+Decision: ADR-008 — Creator becomes member + chairperson.
 
-## OQ-004: Role rules
+### OQ-007: Contribution statuses
 
-Which roles may assign, remove, approve, or confirm records?
+Decision: ADR-009 — PENDING/CONFIRMED/REVERSED; no physical deletion.
 
-Decision: `OPEN`
+### OQ-008: User-to-member identity linking
 
-## OQ-005: Identity uniqueness
-
-Are phone numbers and government ID numbers globally unique?
-
-Decision: `OPEN`
-
-## Resolution rule
-
-When a question is answered, create an ADR, update
-`docs/03_BUSINESS_RULES.md`, and change the decision to `APPROVED`.
+Decision: ADR-008 addendum — `POST /api/v1/auth/me/member-link` claims an
+existing member matching the user's supplied `phone_number` and
+`government_id`.
