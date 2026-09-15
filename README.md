@@ -17,7 +17,7 @@ The long-term system is intended to support:
 
 ## Current status
 
-V1 (Chama Foundation) is implemented. All 59 automated tests pass.
+V1 (Chama Foundation) is implemented. All 66 automated tests pass.
 
 ### Quick start
 
@@ -42,7 +42,7 @@ API docs are available at `/docs`. Run the test suite with `pytest`.
 - Shares (created automatically on confirmation per ADR-005)
 - Authorization on every Chama-scoped query
 - Database migrations (Alembic)
-- 59 automated tests
+- 66 automated tests
 
 ### Not implemented (V2+)
 
@@ -61,7 +61,7 @@ For any deployed environment:
 ```bash
 export CHAMACORE_DEBUG=false
 export CHAMACORE_JWT_SECRET_KEY="<a-strong-random-secret>"
-export DATABASE_URL="postgresql+psycopg://user:pass@host:5432/dbname"
+export CHAMACORE_DATABASE_URL="postgresql+psycopg://user:pass@host:5432/dbname"
 ```
 
 The application will refuse to start if `CHAMACORE_DEBUG` is false and

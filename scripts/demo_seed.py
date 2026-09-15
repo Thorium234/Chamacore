@@ -19,8 +19,11 @@ from datetime import datetime
 
 import httpx
 
-BASE_URL = os.environ.get("CHAMACORE_API_URL", "http://127.0.0.1:8000")
 TOKEN_FILE = "chamacore_token.txt"
+
+
+def base_url() -> str:
+    return os.environ.get("CHAMACORE_API_URL", "http://127.0.0.1:8000")
 
 
 def die(msg: str) -> None:
@@ -62,13 +65,14 @@ def claim_member(client: httpx.Client, headers: dict, phone: str, govt: str) -> 
 
 
 def run(args: argparse.Namespace) -> None:
-    print(f"Using API at {BASE_URL}")
+    api_url = base_url()
+    print(f"Using API at {api_url}")
     suffix = uuid.uuid4().hex[:6]
     email = f"chair.{suffix}@demo.chama"
     password = "securepass123"
     phone_base = args.phone_base or f"+2547{int(suffix, 16) % 100_000_000:08d}"
 
-    with httpx.Client(base_url=BASE_URL, timeout=30) as client:
+    with httpx.Client(base_url=api_url, timeout=30) as client:
         # 1) Chairperson account
         register(client, email, password)
         chair = login(client, email, password)

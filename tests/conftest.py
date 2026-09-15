@@ -29,14 +29,14 @@ def _seed_roles(session):
     session.commit()
 
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+TEST_DATABASE_URL = os.environ.get("CHAMACORE_DATABASE_URL")
 
 
 @pytest.fixture()
 def db(tmp_path):
     """Yield a fresh DB session backed by a per-test SQLite or a shared PostgreSQL."""
-    if DATABASE_URL:
-        engine = create_engine(DATABASE_URL)
+    if TEST_DATABASE_URL:
+        engine = create_engine(TEST_DATABASE_URL)
         Base.metadata.create_all(engine)
         session_factory = sessionmaker(bind=engine, expire_on_commit=False)
         session = session_factory()
@@ -76,9 +76,9 @@ def client(db):
 
 
 def get_concurrency_engine(tmp_path):
-    """Engine for concurrency tests: PostgreSQL when DATABASE_URL is set, else SQLite WAL."""
-    if DATABASE_URL:
-        return create_engine(DATABASE_URL)
+    """Engine for concurrency tests: PostgreSQL when CHAMACORE_DATABASE_URL is set, else SQLite WAL."""
+    if TEST_DATABASE_URL:
+        return create_engine(TEST_DATABASE_URL)
     db_path = tmp_path / "concurrent.db"
     engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
     event.listen(engine, "connect", lambda c, e: c.execute("PRAGMA journal_mode=WAL"))
