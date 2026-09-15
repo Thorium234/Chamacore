@@ -22,13 +22,14 @@ V1 (Chama Foundation) is implemented. All 59 automated tests pass.
 ### Quick start
 
 ```bash
+python -m venv env
+env\Scripts\activate        # Windows (PowerShell); on macOS/Linux: source env/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
 uvicorn app.main:app --reload
-pytest
 ```
 
-API docs are available at `/docs`.
+API docs are available at `/docs`. Run the test suite with `pytest`.
 
 ### Implemented
 
