@@ -1,0 +1,65 @@
+https://fastapi.tiangolo.com/python-types/#classes-as-types
+https://www.geeksforgeeks.org/python/introduction-to-fastapi/
+https://www.geeksforgeeks.org/python/installation-of-fastapi/
+
+
+Installation of FastAPI
+Last Updated : 20 Jun, 2026
+FastAPI is a modern Python framework used for building high-performance APIs with minimal code. It helps developers to quickly create, test, and deploy scalable web applications and RESTful services. Setting up FastAPI is simple and quick. Let’s go step by step:
+
+Step 1: Install FastAPI
+Use pip to install the FastAPI framework:
+
+pip install fastAPI
+
+Step 2: Install an ASGI Server (Uvicorn)
+FastAPI needs an ASGI server to run. The most common and recommended one is Uvicorn. So, run the following command in the terminal:
+
+pip install "uvicorn[standard]"
+
+Step 3: Write Your First FastAPI App
+Create a file named main.py and add the following code:
+
+Python
+from fastapi import FastAPI
+
+# Create FastAPI app instance
+app = FastAPI()
+
+# Define a simple GET endpoint
+@app.get("/")
+def read_root():
+    return {"message": "Hello World"}
+Explanation:
+
+from fastapi import FastAPI: Imports the FastAPI class.
+app = FastAPI(): Creates an application instance (used by Uvicorn to run the server).
+@app.get("/"): Defines the root (/) route for GET requests.
+def read_root(): A function that runs when the route is accessed.
+return {"message": "Hello World"}: Returns a JSON response.
+Step 4: Run the FastAPI App
+Run the server using Uvicorn:
+
+uvicorn main:app --reload
+
+Here’s what each part means:
+
+main: file name (main.py).
+app: FastAPI instance inside the file.
+--reload: Automatically restarts the server when you make code changes.
+Step 5: Open in Browser
+Once the server starts, you will see a message in the terminal showing that Uvicorn is running (like below). This means your FastAPI app is up and ready:
+
+Screenshot-(237)
+
+Now, let’s test it in the browser:
+
+http://127.0.0.1:8000/ -> Displays your API response.
+http://127.0.0.1:8000/docs -> Opens Swagger UI (interactive docs).
+http://127.0.0.1:8000/redoc -> Opens ReDoc (alternative docs).
+
+When you visit http://127.0.0.1:8000/, you will see the JSON response from your FastAPI app, like this:
+
+Screenshot-(238)
+localhost:8000
+That’s it! You have successfully set up FastAPI, created your first API endpoint and explored the automatic documentation

@@ -1,0 +1,73 @@
+app/
+│
+├── api/
+│   ├── auth/
+│   ├── chamas/
+│   ├── members/
+│   ├── contributions/
+│   ├── shares/
+│   ├── loans/
+│   ├── payouts/
+│   ├── payments/
+│   ├── reports/
+│   └── webhooks/
+│
+├── domain/
+│   ├── chamas/
+│   ├── members/
+│   ├── contributions/
+│   ├── loans/
+│   ├── payments/
+│   └── ledger/
+│
+├── services/
+│   ├── chama_service.py
+│   ├── contribution_service.py
+│   ├── loan_service.py
+│   ├── ledger_service.py
+│   ├── payment_service.py
+│   ├── reconciliation_service.py
+│   └── provider_service.py
+│
+├── providers/
+│   │
+│   ├── base/
+│   │   ├── payment_provider.py
+│   │   └── bank_provider.py
+│   │
+│   ├── jenga/
+│   │   ├── client.py
+│   │   ├── auth.py
+│   │   ├── payments.py
+│   │   ├── accounts.py
+│   │   └── callbacks.py
+│   │
+│   ├── kcb/
+│   │   ├── client.py
+│   │   ├── auth.py
+│   │   ├── payments.py
+│   │   ├── accounts.py
+│   │   └── callbacks.py
+│   │
+│   ├── ncba/
+│   │   ├── client.py
+│   │   ├── auth.py
+│   │   ├── payments.py
+│   │   ├── collections.py
+│   │   └── callbacks.py
+│   │
+│   └── daraja/
+│       ├── client.py
+│       ├── auth.py
+│       ├── stk.py
+│       ├── c2b.py
+│       └── callbacks.py
+│
+├── models/
+├── schemas/
+├── repositories/
+├── db/
+├── security/
+├── workers/
+├── config/
+└── main.py

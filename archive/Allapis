@@ -1,0 +1,299 @@
+Yes. I checked the current official API documentation. The important thing is that there is no single bank API that I would claim gives you unrestricted access to every Kenyan bank account. However, there are a few strong options.
+
+Kenya bank/API comparison for your Chama system
+
+Bank / Provider	API available?	Receive M-Pesa	Bank account access	Statements / transactions	Settlement / collections	Best use for Chama
+
+Jenga / Finserve	✅	✅ M-Pesa + Equitel	🟢 Equity documented	🟢 Equity documented	✅ Account-based settlement	Best if Chama uses Equity
+KCB BUNI	✅	✅	✅ KCB/VOOMA ecosystem	✅ Account services	✅ Payments/collections	Best if Chama uses KCB
+NCBA	✅/API solutions	✅	🟢 NCBA	✅	✅ Virtual accounts + notifications	Excellent for reconciliation
+Equity Bank	✅ via Jenga	✅	✅	✅	✅	Excellent with Jenga
+Co-operative Bank	⚠️ Corporate/API integrations	Depends on product	Depends on onboarding	Depends on product	✅ Business collection options	Need direct commercial/API onboarding
+Absa Kenya	⚠️ Business/API integrations	Depends on product	Depends on onboarding	Depends on product	Depends on product	Enterprise integration
+Stanbic Kenya	⚠️ Business APIs	Depends on product	Depends on onboarding	Depends on product	Depends on product	Enterprise integration
+I&M Bank	⚠️ Corporate integrations	Depends on product	Depends on onboarding	Depends on product	Depends on product	Enterprise integration
+DTB Kenya	⚠️ Corporate/API integrations	Depends on product	Depends on onboarding	Depends on product	Depends on product	Enterprise integration
+Family Bank	⚠️	Depends on product	Depends on onboarding	Depends on product	Depends on product	Requires direct verification
+NCBA + M-Pesa	✅	✅	✅ NCBA account	✅	✅	Very interesting for automated collections
+Daraja	Not a bank API	✅ M-Pesa	❌ bank account access	❌	M-Pesa collection	M-Pesa-only option
+
+
+1. Jenga
+
+Jenga is still a very good choice for your architecture.
+
+Its documentation says Jenga provides access to banks and mobile wallets across East and Central Africa, but service-level support differs. In particular, Jenga explicitly documents its Account Services as currently supporting Equity Bank. 
+
+For Kenya, Jenga's payment gateway supports:
+
+M-Pesa
+
+Equitel
+
+Equity bank payments
+
+
+The bank-account payment option is currently documented as Equity Bank only. 
+
+So for your Chama:
+
+NUCSWG
+   │
+   ├── Equity Bank
+   │       │
+   │       └── Jenga
+   │             ├── M-Pesa STK
+   │             ├── Account balance
+   │             ├── Statements
+   │             └── Account inquiry
+   │
+   └── Members
+
+That is a very clean V1-V5 architecture.
+
+
+---
+
+2. KCB BUNI
+
+This is particularly interesting for your KCB Chama.
+
+KCB's BUNI platform explicitly says its APIs connect to multiple payment networks including all banks and mobile money networks, including M-Pesa, Airtel Money, T-Kash and VOOMA. 
+
+BUNI also provides:
+
+Send Money
+
+Receive Payments
+
+Account Services
+
+Interoperability APIs
+
+
+
+
+However, there's an important condition:
+
+> For production, the business/customer consuming BUNI APIs needs a KCB or VOOMA account. 
+
+
+
+So:
+
+KCB Chama
+    ↓
+KCB Bank Account
+    ↓
+KCB BUNI API
+    ↓
+Your FastAPI
+
+This is potentially better than trying to force Jenga to handle a KCB account.
+
+
+---
+
+3. NCBA
+
+NCBA is actually very interesting for your Chama idea because they explicitly provide API-based payment notifications and reconciliation.
+
+Their corporate API solution provides automatic payment notifications to your system for auto-reconciliation. They also offer virtual accounts that can identify and attribute incoming collections from:
+
+M-Pesa
+
+EFT
+
+PesaLink
+
+SWIFT/RTGS
+
+
+
+
+That maps extremely well to your original question:
+
+> "If money enters the bank, how does my Chama system know?"
+
+
+
+With a properly onboarded NCBA collection/reconciliation solution:
+
+Member
+   ↓
+Payment
+   ↓
+NCBA
+   ↓
+Payment notification
+   ↓
+FastAPI
+   ↓
+Match transaction
+   ↓
+Contribution
+   ↓
+Ledger
+
+That's exactly the kind of architecture you were looking for.
+
+
+---
+
+But there is a better architecture for your project
+
+I wouldn't build the Chama system around one bank.
+
+Instead:
+
+┌── Jenga ── Equity
+                    │
+                    ├── KCB BUNI ── KCB
+                    │
+Chama FastAPI ──────┼── NCBA API ── NCBA
+                    │
+                    ├── Daraja ── M-Pesa
+                    │
+                    └── Future Provider
+
+Your application should have a payment/banking provider layer.
+
+For example:
+
+PaymentProvider
+       │
+       ├── JengaProvider
+       │
+       ├── KCBProvider
+       │
+       ├── NCBAProvider
+       │
+       └── DarajaProvider
+
+Then your Chama business logic doesn't care whether the group uses Equity, KCB or NCBA.
+
+
+---
+
+What I would actually use for your project
+
+V1
+
+Don't integrate banks yet.
+
+Build:
+
+Chama
+Members
+Roles
+Contributions
+Shares
+Registration fees
+Loans
+Basic ledger
+
+V2
+
+Add:
+
+Payment
+PaymentAttempt
+Transaction
+BankAccount
+
+V3
+
+Add Jenga:
+
+FastAPI
+   ↓
+Jenga
+   ↓
+M-Pesa STK Push
+   ↓
+Member enters PIN
+   ↓
+Jenga
+   ↓
+Callback
+   ↓
+FastAPI
+   ↓
+Payment = COMPLETED
+   ↓
+Contribution = PAID
+
+Jenga's STK API supports account-based settlement, so the payment can be associated with the merchant account configuration rather than you having to build a system that constantly asks the bank whether a particular M-Pesa payment happened. 
+
+V4
+
+Build reconciliation:
+
+Payment
+    ↓
+External transaction reference
+    ↓
+Contribution
+    ↓
+Member
+    ↓
+Chama ledger
+
+And handle:
+
+duplicate callbacks
+
+failed payments
+
+pending payments
+
+cancelled payments
+
+reversals
+
+unknown transactions
+
+
+V5
+
+Add bank account monitoring where the provider supports it.
+
+For an Equity Chama, Jenga can currently provide documented account services such as balance and statements. 
+
+For a KCB Chama, investigate BUNI rather than assuming Jenga's Equity account APIs work the same way.
+
+
+---
+
+My recommendation
+
+For your specific Chama project, I would start with:
+
+FastAPI + PostgreSQL + Jenga + M-Pesa
+
+Then architect the code so we can later add:
+
+KCB BUNI + NCBA + other bank providers
+
+without rewriting the Chama system.
+
+That gives you a realistic path:
+
+┌───────────────┐
+                │ React / RN    │
+                └───────┬───────┘
+                        │
+                        ▼
+                 ┌─────────────┐
+                 │   FastAPI   │
+                 └──────┬──────┘
+                        │
+            ┌───────────┼────────────┐
+            ▼           ▼            ▼
+         Jenga       KCB BUNI      NCBA
+            │           │            │
+         Equity        KCB          NCBA
+            │
+          M-Pesa
+
+The key point: don't make Jenga your Chama architecture. Make Jenga one payment/banking provider plugged into your Chama architecture. That is what will allow you to support Equity today and KCB/NCBA later without rebuilding everything.  

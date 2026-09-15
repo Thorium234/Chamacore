@@ -1,0 +1,87 @@
+Yes. Now I understand exactly what you mean. You are not asking how the system reads an NCBA/Equity bank account. You are asking:
+
+> How can an ISP like Centipid take an STK payment from M-Pesa, have the money ultimately settle into a bank account, and still immediately know that a particular customer has paid?
+
+
+
+The answer is: the bank account is not what identifies the payment. The payment API does.
+
+Centipid's published flow confirms this: it sends an STK request through Daraja, Safaricom processes the M-Pesa payment, and Daraja sends the transaction result to Centipid's callback/webhook. Centipid then reconciles that payment against the customer's invoice. 
+
+The Chama version
+
+You can build:
+
+Member
+   ↓
+NUCSWG App
+   ↓
+"Contribute KSh 5,000"
+   ↓
+FastAPI
+   ↓
+Payment provider
+   ↓
+M-Pesa STK Push
+   ↓
+Member enters PIN
+   ↓
+M-Pesa confirms payment
+   ↓
+Webhook → FastAPI
+   ↓
+"John paid KSh 5,000"
+   ↓
+NUCSWG contribution updated
+
+The bank does not need to send your application a notification for this to work.
+
+The payment provider handles the M-Pesa side and gives your application the transaction confirmation.
+
+And the money can settle into the bank
+
+This is where Jenga is particularly relevant.
+
+Jenga explicitly documents an M-Pesa STK/USSD Push with account-based settlement. Its API request includes the merchant.accountNumber, described as the account to be credited when the payment completes. Its callback then reports the transaction status. 
+
+So conceptually:
+
+YOUR FASTAPI
+                    │
+                    │ STK request
+                    ↓
+                 JENGA
+                    │
+                    ↓
+                M-PESA
+                    │
+              Customer PIN
+                    │
+                    ↓
+             Payment succeeds
+                    │
+          ┌─────────┴─────────┐
+          ↓                   ↓
+     Callback             Settlement
+          ↓                   ↓
+     FastAPI             Bank Account
+          │
+          ↓
+ "John contributed
+     KSh 5,000"
+
+That's the missing piece you were getting at.
+
+Jenga also exposes bank account services including balance and mini/full statement APIs, but you don't need those merely to know that an STK payment succeeded. 
+
+So for NUCSWG
+
+If we want:
+
+"Member presses contribute → STK → money ultimately goes to the Chama's bank account → NUCSWG system immediately records the contribution"
+
+then we should investigate Jenga's account-based settlement, rather than trying to make our application somehow monitor the NCBA/Equity account directly.
+
+One important caveat: Jenga is an integration platform and you'll need the appropriate merchant/onboarding arrangement and supported bank account setup. We should verify that the exact NUCSWG bank, account type, settlement arrangement, and commercial terms are supported before committing the architecture. Jenga's documentation explicitly shows account-based settlement and callbacks, so the mechanism itself is real. 
+
+That is much closer to what Centipid is doing than the architecture I described earlier.
