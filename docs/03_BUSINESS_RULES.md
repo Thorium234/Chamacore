@@ -34,6 +34,23 @@ Only rules marked `APPROVED` may be implemented.
   `POST /api/v1/auth/me/member-link`.
 - A user already linked to a member cannot claim again.
 
+### One User per Member (OQ-009)
+
+- A Member identity may be linked to only one User account.
+- A second account attempting to claim an already-linked member is rejected
+  with `409 Conflict`.
+
+### Government-ID exposure (OQ-010)
+
+- Membership and Chama membership-list responses omit `government_id`.
+- `government_id` is only returned via the authenticated user's own member
+  data through the auth endpoints.
+
+### JWT secret fail-closed (OQ-011)
+
+- When `CHAMACORE_DEBUG=false` the application must reject startup unless
+  `CHAMACORE_JWT_SECRET_KEY` is set to a non-default value.
+
 ### Chama access (ADR-008)
 
 - The creator of a Chama is automatically added as a member with `CHAIRPERSON` role.

@@ -28,6 +28,17 @@ class MemberOut(BaseModel):
     created_at: datetime
 
 
+class MemberPublic(BaseModel):
+    """Public view used in membership listings — government ID omitted (ADR decision)."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    first_name: str
+    last_name: str
+    phone_number: str
+    created_at: datetime
+
+
 class ChamaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -54,6 +54,19 @@ API docs are available at `/docs`. Run the test suite with `pytest`.
 - React, React Native, USSD
 - Background workers, microservices
 
+## Production configuration
+
+For any deployed environment:
+
+```bash
+export CHAMACORE_DEBUG=false
+export CHAMACORE_JWT_SECRET_KEY="<a-strong-random-secret>"
+export DATABASE_URL="postgresql+psycopg://user:pass@host:5432/dbname"
+```
+
+The application will refuse to start if `CHAMACORE_DEBUG` is false and
+the JWT secret is still the local-development default.
+
 ## Documentation source of truth
 
 Before changing code, read:

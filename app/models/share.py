@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, Enum, ForeignKey, Numeric
+from sqlalchemy import CheckConstraint, Enum, ForeignKey, Numeric, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
@@ -37,6 +37,7 @@ class Share(Base, UUIDMixin, TimestampMixin):
 
     __table_args__ = (
         CheckConstraint("units >= 0", name="ck_shares_units_non_negative"),
+        UniqueConstraint("contribution_id", name="uq_shares_contribution_id"),
     )
 
     def __repr__(self) -> str:

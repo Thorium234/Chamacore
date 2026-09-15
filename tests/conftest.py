@@ -1,7 +1,11 @@
 """Shared test fixtures: in-process SQLite DB, seeded roles, TestClient, auth helpers."""
 
+import os
+
+os.environ.setdefault("CHAMACORE_DEBUG", "true")
+
 import pytest
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
 from app.api.deps import oauth2_scheme
@@ -25,19 +29,33 @@ def _seed_roles(session):
     session.commit()
 
 
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+
 @pytest.fixture()
 def db(tmp_path):
-    """Yield a fresh DB session backed by a per-test SQLite file."""
-    db_path = tmp_path / "test.db"
-    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
-    event.listen(engine, "connect", lambda c, e: c.execute("PRAGMA journal_mode=WAL"))
-    Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
-    session = session_factory()
-    _seed_roles(session)
-    yield session
-    session.close()
-    engine.dispose()
+    """Yield a fresh DB session backed by a per-test SQLite or a shared PostgreSQL."""
+    if DATABASE_URL:
+        engine = create_engine(DATABASE_URL)
+        Base.metadata.create_all(engine)
+        session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+        session = session_factory()
+        _seed_roles(session)
+        yield session
+        session.close()
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+    else:
+        db_path = tmp_path / "test.db"
+        engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+        event.listen(engine, "connect", lambda c, e: c.execute("PRAGMA journal_mode=WAL"))
+        Base.metadata.create_all(engine)
+        session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+        session = session_factory()
+        _seed_roles(session)
+        yield session
+        session.close()
+        engine.dispose()
 
 
 @pytest.fixture()
@@ -55,6 +73,16 @@ def client(db):
             yield c
     finally:
         fastapi_app.dependency_overrides.clear()
+
+
+def get_concurrency_engine(tmp_path):
+    """Engine for concurrency tests: PostgreSQL when DATABASE_URL is set, else SQLite WAL."""
+    if DATABASE_URL:
+        return create_engine(DATABASE_URL)
+    db_path = tmp_path / "concurrent.db"
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+    event.listen(engine, "connect", lambda c, e: c.execute("PRAGMA journal_mode=WAL"))
+    return engine
 
 
 def register_and_login(client, email: str = "user@example.com", password: str = "secret123") -> dict:

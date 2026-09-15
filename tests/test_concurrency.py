@@ -3,7 +3,7 @@
 import threading
 
 import pytest
-from sqlalchemy import create_engine, event, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
@@ -19,22 +19,22 @@ from app.services.membership import MAX_NUMBER_RETRIES
 
 import app.models  # noqa: F401
 
+from tests.conftest import get_concurrency_engine
 
+
+@pytest.mark.concurrency
 class TestMembershipNumberConcurrency:
     def test_concurrent_numbers_are_unique(self, tmp_path):
-        db_path = tmp_path / "concurrent.db"
-        engine = create_engine(
-            f"sqlite:///{db_path}",
-            connect_args={"check_same_thread": False},
-        )
-        event.listen(engine, "connect", lambda c, e: c.execute("PRAGMA journal_mode=WAL"))
+        engine = get_concurrency_engine(tmp_path)
         Base.metadata.create_all(engine)
         sf = sessionmaker(bind=engine, expire_on_commit=False)
 
-        # Seed roles
+        # Seed roles idempotently (tables may already exist on PostgreSQL)
         session = sf()
+        existing = set(session.execute(select(Role.name)).scalars().all())
         for rn in RoleName:
-            session.add(Role(name=rn.value))
+            if rn.value not in existing:
+                session.add(Role(name=rn.value))
 
         # Create a user (member_id=None, we won't test auth — just sequence)
         from app.models.user import User
@@ -63,38 +63,39 @@ class TestMembershipNumberConcurrency:
         errors: list[tuple[int, BaseException]] = []
 
         def create_member(i):
-            # Mirror the service's concurrency protocol: locked allocation,
-            # unique-constraint backstop, bounded retry on number collisions.
-            for attempt in range(MAX_NUMBER_RETRIES):
-                try:
-                    s = sf()
-                    member = Member(
-                        first_name=f"Member{i}",
-                        last_name="T",
-                        phone_number=f"+2547000{i:04d}",
-                        government_id=f"GID-{i:04d}",
-                    )
-                    s.add(member)
-                    s.flush()
-                    number = MembershipRepository(s).allocate_membership_number(chama_id)
-                    MembershipRepository(s).create(
-                        chama_id=chama_id,
-                        member_id=member.id,
-                        membership_number=number,
-                    )
-                    s.commit()
-                    break
-                except IntegrityError as exc:
-                    s.rollback()
-                    if "membership_number" in str(exc.orig) and attempt < MAX_NUMBER_RETRIES - 1:
-                        continue
-                    raise
+            try:
+                for attempt in range(MAX_NUMBER_RETRIES):
+                    try:
+                        s = sf()
+                        member = Member(
+                            first_name=f"Member{i}",
+                            last_name="T",
+                            phone_number=f"+2547000{i:04d}",
+                            government_id=f"GID-{i:04d}",
+                        )
+                        s.add(member)
+                        s.flush()
+                        number = MembershipRepository(s).allocate_membership_number(chama_id)
+                        MembershipRepository(s).create(
+                            chama_id=chama_id,
+                            member_id=member.id,
+                            membership_number=number,
+                        )
+                        s.commit()
+                        break
+                    except IntegrityError as exc:
+                        s.rollback()
+                        if "membership_number" in str(exc.orig) and attempt < MAX_NUMBER_RETRIES - 1:
+                            continue
+                        raise
+            except Exception as exc:
+                errors.append((i, exc))
 
         threads = [threading.Thread(target=create_member, args=(i,)) for i in range(20)]
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=10)
+            t.join(timeout=30)
 
         assert errors == [], f"concurrency errors: {errors}"
 

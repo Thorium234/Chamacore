@@ -37,6 +37,9 @@ class AuthService:
         member = self.members.find_by_identity(phone_number, government_id)
         if member is None:
             raise NotFoundError("No member matches these identity details")
+        existing = self.users.get_by_member_id(member.id)
+        if existing is not None:
+            raise ConflictError("This member identity is already linked to another account")
         user.member_id = member.id
         self.db.commit()
         return user

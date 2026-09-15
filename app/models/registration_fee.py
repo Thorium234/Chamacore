@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, Enum, ForeignKey, Numeric
+from sqlalchemy import CheckConstraint, Enum, ForeignKey, Numeric, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
@@ -32,6 +32,7 @@ class RegistrationFee(Base, UUIDMixin, TimestampMixin):
 
     __table_args__ = (
         CheckConstraint("amount >= 0", name="ck_registration_fees_amount_non_negative"),
+        UniqueConstraint("membership_id", name="uq_registration_fees_membership_id"),
     )
 
     def __repr__(self) -> str:

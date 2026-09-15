@@ -18,6 +18,8 @@ The repository is now a working backend for:
 - Contributions and shares
 - Authorization on every Chama-scoped query
 - Database migrations and automated tests
+- V1 hardening: identity-claim uniqueness, DB-level constraint backstops,
+  government-ID masking, JWT secret fail-closed, health/readiness endpoints
 
 ## Currently executable
 
@@ -27,7 +29,7 @@ uvicorn app.main:app --reload
 pytest
 ```
 
-All 59 tests pass. Swagger docs are available at `/docs`.
+All 66 tests pass. Swagger docs are available at `/docs`.
 
 ## Implemented
 
@@ -43,7 +45,9 @@ All 59 tests pass. Swagger docs are available at `/docs`.
   share endpoints
 - Server-side transactional membership numbers
 - Tests (auth, chamas, memberships, roles, registration fees,
-  contributions, membership-number concurrency)
+  contributions, membership-number concurrency, identity-claim uniqueness,
+  constraint backstop, JWT config, health)
+- PostgreSQL test target (Docker Compose + CI workflow)
 - Approved decisions recorded in ADRs and `docs/decisions/`
 
 ## Not implemented (out of V1 scope)
@@ -66,4 +70,4 @@ must not be implemented now.
 
 ## Official status statement
 
-> V1 implemented. All 59 acceptance tests pass.
+> V1 implemented and hardened. All 66 acceptance tests pass.

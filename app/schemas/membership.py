@@ -7,7 +7,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.enums import MembershipStatus, RoleName
-from app.schemas.chama import MemberDetails, MemberOut
+from app.schemas.chama import MemberDetails, MemberPublic
 from app.schemas.common import Money, PositiveMoney, Period, Quantity
 
 
@@ -31,7 +31,7 @@ class MembershipOut(BaseModel):
     membership_number: int
     status: MembershipStatus
     joined_at: datetime
-    member: MemberOut | None = None
+    member: MemberPublic | None = None
     roles: list[RoleName] = []
     registration_fee: "RegistrationFeeOut | None" = None
 

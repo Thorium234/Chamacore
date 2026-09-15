@@ -38,10 +38,12 @@ Implemented. Initial migration applied on SQLite for development.
 ## Required constraints
 
 - `users.email` is unique.
+- `users.member_id` is unique (one User per Member).
 - `members.phone_number` is unique.
 - `members.government_id` is unique.
-- `users.member_id` is unique (optional).
 - A membership references an existing member and Chama.
+- `registration_fees.membership_id` is unique (one fee per membership).
+- `shares.contribution_id` is unique (one share per confirmed contribution).
 - A person cannot have duplicate membership in one Chama.
 - A role assignment cannot be duplicated.
 - Membership numbers are allocated transactionally.

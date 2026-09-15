@@ -38,3 +38,21 @@ Decision: ADR-009 — PENDING/CONFIRMED/REVERSED; no physical deletion.
 Decision: ADR-008 addendum — `POST /api/v1/auth/me/member-link` claims an
 existing member matching the user's supplied `phone_number` and
 `government_id`.
+
+### OQ-009: Multiple accounts for one Member (P0 security fix)
+
+Decision: One Member may be linked to only one User account. Enforced with
+`UNIQUE (users.member_id)` and a `409` when a second account attempts to
+claim an already-claimed member.
+
+### OQ-010: Government-ID exposure
+
+Decision: Chama/membership views return members without `government_id`
+(public member schema). Full government IDs are only available to the user
+whose own member record they belong to via the auth endpoints.
+
+### OQ-011: JWT secret fail-closed
+
+Decision: Outside development mode (`CHAMACORE_DEBUG=false`),
+`CHAMACORE_JWT_SECRET_KEY` must be set; the known default secret is rejected
+at configuration load.

@@ -16,6 +16,10 @@ class UserRepository(BaseRepository):
         stmt = select(User).where(User.email == email.lower())
         return self.db.scalars(stmt).first()
 
+    def get_by_member_id(self, member_id: uuid.UUID) -> User | None:
+        stmt = select(User).where(User.member_id == member_id)
+        return self.db.scalars(stmt).first()
+
     def create(self, email: str, password_hash: str) -> User:
         user = User(email=email.lower(), password_hash=password_hash)
         self.db.add(user)

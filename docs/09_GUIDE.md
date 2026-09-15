@@ -13,7 +13,7 @@ First read:
 - docs/08_ROADMAP.md
 - docs/decisions/OPEN_QUESTIONS.md
 
-Current truth: V1 (Chama Foundation) is implemented, tested (59 tests), and pushed. Future versions are out of scope.
+Current truth: V1 (Chama Foundation) is implemented, hardened, and tested (66 tests). Future versions are out of scope.
 
 Implement only V1:
 Users, Chamas, Members, Memberships, Roles, Registration Fees, Contributions, Shares, authentication, authorization, migrations, and tests.

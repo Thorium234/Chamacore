@@ -45,3 +45,12 @@ same member.
 - No matching member returns not found.
 - This is how a user other than the Chama creator becomes able to act within
   a Chama after being added as a member by an administrator.
+
+## Addendum 2026-09-15 (P0): One User per Member
+
+A Member identity may be claimed by only one User account. This is enforced
+at the database with `UNIQUE (users.member_id)` and in the linking service
+(a second account claiming an already-claimed member returns `409 Conflict`).
+
+This prevents two separate accounts from acting as the same person and
+inheriting the same Chama leadership permissions.

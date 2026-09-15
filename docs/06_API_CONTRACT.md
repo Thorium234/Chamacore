@@ -14,6 +14,20 @@ Status: `IMPLEMENTED`
 
 Returns `{"message": "Hello World"}`. Will become a health endpoint later.
 
+## Health and Readiness
+
+### `GET /health`
+
+Status: `IMPLEMENTED`
+
+Returns `{"status": "ok"}`. No database check.
+
+### `GET /ready`
+
+Status: `IMPLEMENTED`
+
+Returns `{"status": "ready"}`. Verifies database connectivity.
+
 ## Authentication
 
 ### `POST /api/v1/auth/register`
@@ -182,3 +196,4 @@ Returns 403 if unauthorized, 404 if membership not found.
 - Return structured errors.
 - Use appropriate HTTP status codes.
 - Never expose passwords, hashes, secrets, or credentials.
+- Membership views omit government IDs (public member schema only).

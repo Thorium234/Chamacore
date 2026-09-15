@@ -20,7 +20,7 @@ class User(Base, UUIDMixin, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     member_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("members.id", ondelete="RESTRICT"), nullable=True
+        ForeignKey("members.id", ondelete="RESTRICT"), nullable=True, unique=True
     )
 
     member: Mapped["Member | None"] = relationship(lazy="joined")
