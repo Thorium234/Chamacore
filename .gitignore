@@ -26,6 +26,9 @@ build/
 .pytest_cache/
 .ruff_cache/
 
+# Local demo artifacts
+chamacore_token.txt
+
 # IDEs and Tools
 .vscode/
 .idea/
