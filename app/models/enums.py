@@ -34,3 +34,11 @@ class RoleName(StrEnum):
     TREASURER = "TREASURER"
     SECRETARY = "SECRETARY"
     MEMBER = "MEMBER"
+
+
+class LedgerAccountType(StrEnum):
+    ASSET = "ASSET"
+    LIABILITY = "LIABILITY"
+    EQUITY = "EQUITY"
+    REVENUE = "REVENUE"
+    EXPENSE = "EXPENSE"

@@ -188,6 +188,26 @@ Status: `IMPLEMENTED`
 Returns all shares for a membership. Any authorized member.
 Returns 403 if unauthorized, 404 if membership not found.
 
+## Ledger (V2)
+
+### `GET /api/v1/chamas/{chama_id}/ledger`
+
+Status: `IMPLEMENTED`
+
+Returns the Chama's financial transaction history (ledger transactions with
+their debit/credit entries). Any active member of the Chama.
+
+Returns a list of transactions, each with `entries` containing
+`account_id`, `account_code`, `account_name`, `debit`, and `credit`. Amounts
+are decimal strings with two decimal places.
+
+Returns 403 if the caller has no active membership, 404 if the Chama does not
+exist.
+
+Posting rules: there is no public endpoint that writes to the ledger. Ledger
+entries are created only by the trusted posting service when an approved
+business event is posted (ADR-012).
+
 ## API rules
 
 - Use versioned URLs.

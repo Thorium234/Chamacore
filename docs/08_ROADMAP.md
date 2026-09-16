@@ -1,8 +1,8 @@
 # ChamaCore Roadmap
 
-## Current version: V1
+## Current version: V2 (in progress)
 
-### V1 — Chama Foundation
+### V1 — Chama Foundation (complete)
 
 - Users
 - Chamas
@@ -17,15 +17,17 @@
 - Database migrations
 - Automated tests
 
-V1 is complete only when its acceptance criteria pass.
+## V2 — Financial Core (current)
 
-## V2 — Financial Core
-
+- Ledger (immutable double-entry, ADR-010..ADR-013) — foundation implemented
+- Financial transaction history — implemented
 - Loans
 - Loan repayments
 - Payouts
-- Ledger
-- Financial transaction history
+
+Design and approved decisions: `docs/10_V2_FINANCIAL_CORE.md` and
+`docs/decisions/`. Loans, repayments, and payouts are blocked by open
+questions (OQ-015..OQ-020).
 
 ## V3 — Payment Architecture
 
@@ -58,5 +60,6 @@ V1 is complete only when its acceptance criteria pass.
 
 ## Scope rule
 
-Only V1 may be implemented now. Future versions describe direction, not
-current requirements.
+Only the current version (V2 Financial Core) may be implemented now.
+Future versions describe direction, not current requirements. Business rules
+not yet approved are recorded as open questions and must not be guessed.

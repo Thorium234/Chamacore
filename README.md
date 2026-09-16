@@ -17,7 +17,9 @@ The long-term system is intended to support:
 
 ## Current status
 
-V1 (Chama Foundation) is implemented. All 66 automated tests pass.
+V1 (Chama Foundation) is implemented. V2 (Financial Core) is in progress:
+the immutable double-entry ledger foundation and financial transaction
+history are implemented. All 81 automated tests pass.
 
 ### Quick start
 
@@ -42,12 +44,17 @@ API docs are available at `/docs`. Run the test suite with `pytest`.
 - Shares (created automatically on confirmation per ADR-005)
 - Authorization on every Chama-scoped query
 - Database migrations (Alembic)
-- 66 automated tests
+- 66 automated tests (V1)
+- V2 ledger foundation: immutable double-entry ledger, financial transaction
+  history, trusted posting service with idempotency and compensating
+  corrections (15 additional tests)
 
-### Not implemented (V2+)
+### Not implemented (V2+, blocked or deferred)
 
-- Loans, loan repayments, payouts
-- Ledger
+- Loans, loan repayments, payouts (blocked by open questions)
+- Contribution-to-ledger posting (blocked by open questions)
+- Ledger-backed balances/reports
+- Audit event table
 - Payments, webhooks, payment providers
 - Bank reconciliation
 - Notifications

@@ -6,6 +6,7 @@ from app.api.v1 import (
     auth,
     chamas,
     contributions,
+    ledger,
     memberships,
     registration_fees,
     roles,
@@ -20,3 +21,4 @@ api_router.include_router(roles.router)
 api_router.include_router(registration_fees.router)
 api_router.include_router(contributions.router)
 api_router.include_router(shares.router)
+api_router.include_router(ledger.router)

@@ -7,7 +7,8 @@ Read the numbered documents in `docs/` and any accepted ADRs in
 
 ## Current scope
 
-Only V1 may be implemented now:
+V1 (Chama Foundation) is complete. Only V2 (Financial Core) may be
+implemented now:
 
 - Users
 - Chamas
@@ -20,20 +21,26 @@ Only V1 may be implemented now:
 - Authentication and authorization
 - Database migrations
 - Automated tests
+- V2 financial ledger (ADR-010..ADR-013)
+- Financial transaction history
+- Loans and loan repayments (only after the loan open questions are answered)
+- Payouts (only after the payout open questions are answered)
 
 Do not implement yet:
 
-- Loans or loan repayments
-- Payouts
-- Ledger
+- Connecting confirmed contributions to the ledger (blocked by OQ-012/OQ-013
+  in `docs/decisions/OPEN_QUESTIONS.md` unless an approved decision allows it)
 - Payments or webhooks
 - Jenga, Daraja, KCB BUNI, or NCBA
 - Bank reconciliation
 - Notifications
 - React or React Native
 - USSD
-- Background workers
+- Background workers unless explicitly required by an approved V2 decision
 - Microservices
+
+V2 loans, repayments, and payouts remain blocked until the corresponding
+open questions are answered. Do not guess those rules.
 
 ## No guessing
 

@@ -71,5 +71,7 @@ Use a transactional sequence or counter mechanism.
 
 ## Scope rule
 
-Implement only V1 tables. Do not create payment, bank, loan, ledger, webhook,
-or reconciliation tables until their roadmap version is active.
+V1 is complete. V2 ledger tables (`ledger_accounts`, `ledger_transactions`,
+`ledger_entries`) are implemented; see `docs/10_V2_FINANCIAL_CORE.md` and
+ADR-010..ADR-013. Do not create payment, bank, loan, loan-repayment, payout,
+webhook, or reconciliation tables until their approved V2/V3 design allows it.

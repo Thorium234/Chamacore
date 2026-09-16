@@ -1,7 +1,5 @@
 # Open Questions
 
-All questions have been resolved.
-
 ## Resolved
 
 ### OQ-001: Registration fee lifecycle
@@ -56,3 +54,93 @@ whose own member record they belong to via the auth endpoints.
 Decision: Outside development mode (`CHAMACORE_DEBUG=false`),
 `CHAMACORE_JWT_SECRET_KEY` must be set; the known default secret is rejected
 at configuration load.
+
+## Open (V2)
+
+### OQ-012: Chama chart of accounts — creation and maintenance
+
+**Question.** When a Chama is created, what accounts should its ledger
+receive, and how are accounts created/maintained afterwards?
+
+**Blocked work.** Seeding `ledger_accounts` at Chama creation; any default
+chart of accounts. The ledger tables and posting machinery exist, but no
+account records are created automatically.
+
+**Why it is open.** The composition of a chart of accounts is a business
+decision (which asset, liability, equity, revenue, and expense accounts a
+Chama needs), not an accounting-technical one that ChamaCore can derive.
+
+### OQ-013: Contribution posting accounts
+
+**Question.** When a confirmed contribution is posted to the ledger, which
+accounts are debited and credited?
+
+**Blocked work.** Step 4 of the V2 implementation order: connecting confirmed
+contributions to ledger entries. ADR-014 is proposed but on hold.
+
+**Why it is open.** Without a decision on the chart of accounts (OQ-012) and
+the account mapping for a contribution, posting would invent a business rule.
+
+### OQ-014: Registration-fee payments and the ledger
+
+**Question.** V1 registration fees are OWED or WAIVED; there is no payment
+flow. Should a fee payment be a recorded financial action on the ledger, and
+if so, through which accounts and statuses?
+
+**Blocked work.** Any registration-fee payment feature or posting rule.
+
+**Why it is open.** No approved rule describes how fee money enters the
+system.
+
+### OQ-015: Loan eligibility
+
+**Question.** Which memberships are eligible to borrow, and under what
+conditions (e.g. active membership, minimum tenure, shares held, previous
+defaults)?
+
+**Blocked work.** Loan creation and all loan features.
+
+### OQ-016: Loan principal limits
+
+**Question.** What is the maximum loan principal a member can borrow, and how
+is it calculated (e.g. multiple of shares, fixed amount, Chama fund balance)?
+
+**Blocked work.** Loan creation.
+
+### OQ-017: Interest or service-charge rules
+
+**Question.** Are loans interest-bearing or service-charged? What rate or
+formula applies, and how is it accrued and recorded on the ledger?
+
+**Blocked work.** Loan interest and repayment amount calculation.
+
+### OQ-018: Repayment schedules, late payments, and defaults
+
+**Question.** What repayment schedule models are allowed (monthly, lump sum,
+custom)? What happens on a late payment, and what constitutes a default?
+
+**Blocked work.** Repayment schedules, late fees, default handling, and their
+ledger postings.
+
+### OQ-019: Payout eligibility
+
+**Question.** Which members are eligible for a payout, what can be paid out
+(e.g. share value, savings pool) and how is the amount calculated?
+
+**Blocked work.** Payout creation.
+
+### OQ-020: Payout approval and authorization
+
+**Question.** Who may initiate and who must approve a payout, and is a payout
+ever reversible?
+
+**Blocked work.** Payout API and ledger posting.
+
+## Guiding rule (AGENTS.md)
+
+If a decision is missing:
+
+1. Do not silently choose an implementation.
+2. Record it in `docs/decisions/OPEN_QUESTIONS.md`.
+3. Explain which work is blocked.
+4. Ask for a decision.
