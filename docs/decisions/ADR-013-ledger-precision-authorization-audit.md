@@ -54,3 +54,7 @@ permission model.
 - A user without an active membership in a Chama cannot read its ledger.
 - Every posting is attributable to a user and a source record.
 - An entry is only writable by the posting service, never by an endpoint.
+- The financial transaction history endpoint uses cursor-based pagination
+  (keyset on `created_at DESC, id DESC`) returning `LedgerHistoryOut` with
+  `items`, `next_cursor`, and `has_more`. The cursor is a base64-encoded
+  JSON object `{"t": <iso_timestamp>, "i": "<uuid>"}`.

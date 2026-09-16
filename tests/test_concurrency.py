@@ -1,20 +1,25 @@
 """Concurrency test: membership numbers are safe under concurrent creation."""
 
 import threading
+import uuid
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import sessionmaker
 
+from app.core.errors import ConflictError
 from app.db.base import Base
 from app.models.chama import Chama
-from app.models.enums import MembershipStatus, RoleName
+from app.models.enums import LedgerAccountType, MembershipStatus, RoleName
+from app.models.ledger_account import LedgerAccount
 from app.models.member import Member
 from app.models.membership import Membership
 from app.models.membership_sequence import MembershipSequence
 from app.models.role import Role
 from app.repositories.membership import MembershipRepository
+from app.services.ledger import LedgerLine, LedgerService
 from app.services.membership import MAX_NUMBER_RETRIES
 
 import app.models  # noqa: F401
@@ -109,3 +114,104 @@ class TestMembershipNumberConcurrency:
         s.close()
         assert len(numbers) == 21  # creator (1) + 20 new members
         assert numbers == list(range(1, 22))
+
+
+@pytest.mark.concurrency
+class TestLedgerSourceConcurrency:
+    """Concurrent callers posting the same source must yield one winner."""
+
+    def test_conflicting_payloads_on_same_source(self, tmp_path):
+        from app.core.security import hash_password
+        from app.models.user import User
+
+        engine = get_concurrency_engine(tmp_path)
+        Base.metadata.create_all(engine)
+        sf = sessionmaker(bind=engine, expire_on_commit=False)
+
+        seed = sf()
+        user = User(email="ledger@e.com", password_hash=hash_password("x"))
+        seed.add(user)
+        seed.flush()
+        chama = Chama(name="Ledger C", created_by_user_id=user.id, registration_fee_amount=0)
+        seed.add(chama)
+        seed.flush()
+        member = Member(
+            first_name="L",
+            last_name="E",
+            phone_number="+254700001111",
+            government_id="GID-L1",
+        )
+        seed.add(member)
+        seed.flush()
+        user.member_id = member.id
+        seed.add(
+            Membership(
+                chama_id=chama.id,
+                member_id=member.id,
+                membership_number=1,
+                status=MembershipStatus.ACTIVE,
+            )
+        )
+        cash = LedgerAccount(
+            chama_id=chama.id, code="1000", name="Cash", account_type=LedgerAccountType.ASSET
+        )
+        equity = LedgerAccount(
+            chama_id=chama.id,
+            code="3000",
+            name="Equity",
+            account_type=LedgerAccountType.EQUITY,
+        )
+        seed.add_all([cash, equity])
+        seed.commit()
+        chama_id = chama.id
+        cash_id = cash.id
+        equity_id = equity.id
+        seed.close()
+
+        source_id = uuid.uuid4()
+        outcomes: list[tuple[str, str]] = []
+        lock = threading.Lock()
+
+        def post_amount(amount: Decimal):
+            for _ in range(20):
+                s = sf()
+                try:
+                    txn = LedgerService(s).post_transaction(
+                        actor=user,
+                        chama_id=chama_id,
+                        source_type="CONTRIBUTION",
+                        source_id=source_id,
+                        description="conflict",
+                        lines=[
+                            LedgerLine(account_id=cash_id, debit=amount),
+                            LedgerLine(account_id=equity_id, credit=amount),
+                        ],
+                    )
+                    s.close()
+                    with lock:
+                        outcomes.append(("ok", str(txn.id)))
+                    return
+                except ConflictError:
+                    s.rollback()
+                    s.close()
+                    with lock:
+                        outcomes.append(("conflict", "payload/state conflict"))
+                    return
+                except (IntegrityError, OperationalError):
+                    s.rollback()
+                    s.close()
+                    continue
+            with lock:
+                outcomes.append(("error", "retries exhausted"))
+
+        threads = [
+            threading.Thread(target=post_amount, args=(Decimal("100.00"),)),
+            threading.Thread(target=post_amount, args=(Decimal("200.00"),)),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        statuses = sorted(status for status, _ in outcomes)
+        assert statuses == ["conflict", "ok"], f"ledger concurrency outcomes: {outcomes}"

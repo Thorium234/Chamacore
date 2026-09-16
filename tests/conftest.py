@@ -5,11 +5,12 @@ import os
 os.environ.setdefault("CHAMACORE_DEBUG", "true")
 
 import pytest
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from app.api.deps import oauth2_scheme
 from app.db.base import Base
+from app.db.ledger_guards import create_ledger_guards
 from app.db.session import get_db
 from app.main import app as fastapi_app
 from app.models.enums import RoleName
@@ -38,6 +39,8 @@ def db(tmp_path):
     if TEST_DATABASE_URL:
         engine = create_engine(TEST_DATABASE_URL)
         Base.metadata.create_all(engine)
+        with engine.begin() as conn:
+            create_ledger_guards(conn)
         session_factory = sessionmaker(bind=engine, expire_on_commit=False)
         session = session_factory()
         _seed_roles(session)
@@ -48,8 +51,15 @@ def db(tmp_path):
     else:
         db_path = tmp_path / "test.db"
         engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
-        event.listen(engine, "connect", lambda c, e: c.execute("PRAGMA journal_mode=WAL"))
+
+        def _enable_sqlite_constraints(conn, _record):
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+
+        event.listen(engine, "connect", _enable_sqlite_constraints)
         Base.metadata.create_all(engine)
+        with engine.begin() as conn:
+            create_ledger_guards(conn)
         session_factory = sessionmaker(bind=engine, expire_on_commit=False)
         session = session_factory()
         _seed_roles(session)
@@ -81,7 +91,12 @@ def get_concurrency_engine(tmp_path):
         return create_engine(TEST_DATABASE_URL)
     db_path = tmp_path / "concurrent.db"
     engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
-    event.listen(engine, "connect", lambda c, e: c.execute("PRAGMA journal_mode=WAL"))
+
+    def _enable_sqlite_constraints(conn, _record):
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+
+    event.listen(engine, "connect", _enable_sqlite_constraints)
     return engine
 
 

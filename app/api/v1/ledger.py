@@ -1,17 +1,37 @@
 """Ledger endpoints (financial transaction history)."""
 
+import base64
+import json
 import uuid
+from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.ledger import LedgerEntryOut, LedgerTransactionOut
+from app.schemas.ledger import LedgerEntryOut, LedgerHistoryOut, LedgerTransactionOut
 from app.services.ledger import LedgerService
 
 router = APIRouter(tags=["ledger"])
+
+
+def _encode_cursor(created_at: datetime, transaction_id: uuid.UUID) -> str:
+    payload = json.dumps({"t": created_at.isoformat(), "i": str(transaction_id)})
+    return base64.urlsafe_b64encode(payload.encode("ascii")).decode("ascii")
+
+
+def _decode_cursor(cursor: str | None) -> tuple[datetime | None, uuid.UUID | None]:
+    if not cursor:
+        return None, None
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(cursor.encode("ascii")))
+        created_at = datetime.fromisoformat(payload["t"])
+        transaction_id = uuid.UUID(payload["i"])
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid ledger cursor") from exc
+    return created_at, transaction_id
 
 
 def _to_out(transaction) -> LedgerTransactionOut:
@@ -37,11 +57,29 @@ def _to_out(transaction) -> LedgerTransactionOut:
     )
 
 
-@router.get("/chamas/{chama_id}/ledger", response_model=list[LedgerTransactionOut])
+@router.get("/chamas/{chama_id}/ledger", response_model=LedgerHistoryOut)
 def list_ledger(
     chama_id: uuid.UUID,
+    limit: int = Query(default=25, ge=1, le=100),
+    cursor: str | None = Query(default=None),
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    transactions = LedgerService(db).list_by_chama(actor=actor, chama_id=chama_id)
-    return [_to_out(t) for t in transactions]
+    service = LedgerService(db)
+    before_created_at, before_id = _decode_cursor(cursor)
+    page = service.list_page(
+        actor=actor,
+        chama_id=chama_id,
+        limit=limit + 1,
+        before_created_at=before_created_at,
+        before_id=before_id,
+    )
+    has_more = len(page) > limit
+    items = page[:limit]
+    next_cursor = None
+    if has_more and items:
+        last = items[-1]
+        next_cursor = _encode_cursor(last.created_at, last.id)
+    return LedgerHistoryOut(
+        items=[_to_out(t) for t in items], next_cursor=next_cursor, has_more=has_more
+    )

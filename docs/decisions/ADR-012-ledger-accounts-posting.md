@@ -69,9 +69,16 @@ without inventing a separate idempotency-key mechanism.
 
 - Accounts must exist before any posting can reference them.
 - Unbalanced, zero, or cross-chama postings are rejected with a domain error
-  and no partial write.
+  and no partial write. Cross-chama references are also blocked at the
+  database level by composite foreign keys on `ledger_entries`
+  (`(chama_id, account_id)` and `(chama_id, transaction_id)`).
+- Account `account_type` is constrained to the five standard types
+  (`ASSET`, `LIABILITY`, `EQUITY`, `REVENUE`, `EXPENSE`) by a database
+  CHECK constraint. Account `code` and `name` must be non-empty (CHECK
+  constraint).
 - Posting the same business event twice is safe and returns the same
-  transaction.
+  transaction. Conflicting idempotent retries (different amounts, accounts,
+  or description) raise `ConflictError`.
 - The composition of the initial chart of accounts remains an open question
   (OQ-012) and must be answered before business events (for example confirmed
   contributions) are connected to the ledger (ADR-014).

@@ -31,3 +31,9 @@ class LedgerTransactionOut(BaseModel):
     reverses_transaction_id: uuid.UUID | None
     created_at: datetime
     entries: list[LedgerEntryOut] = []
+
+
+class LedgerHistoryOut(BaseModel):
+    items: list[LedgerTransactionOut]
+    next_cursor: str | None = None
+    has_more: bool = False

@@ -36,11 +36,19 @@ new history instead of rewriting existing history.
 - Corrections are visible in the transaction history as their own
   transactions, always referencing the original.
 - The service rejects an attempt to reverse a reversal, and rejects a second
-  reversal of the same transaction.
-- Database-level protection (triggers) is not added in this increment;
-  immutability is enforced by the posting service and by the absence of any
-  repository update/delete methods. Trigger enforcement is a candidate for
-  production hardening.
+  reversal of the same transaction. A partial unique index
+  (`uq_ledger_transactions_reversal`) enforces this at the database level.
+- Database-level triggers (`trg_ledger_transactions_no_update`,
+  `trg_ledger_transactions_no_delete`, `trg_ledger_entries_no_update`,
+  `trg_ledger_entries_no_delete`) block UPDATE and DELETE on both
+  `ledger_transactions` and `ledger_entries`. This makes the tables truly
+  append-only at the database level, not just by application convention.
+- The self-referencing reversal foreign key is composite
+  `(chama_id, reverses_transaction_id) → (chama_id, id)`, preventing
+  cross-Chama reversal references at the database level.
+- The `updated_at` column has been removed from `ledger_transactions` and
+  `ledger_entries` since these tables are immutable. `ledger_accounts` retains
+  `updated_at` because accounts may be edited.
 
 ## Open questions affecting corrections
 

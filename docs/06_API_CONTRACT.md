@@ -197,12 +197,45 @@ Status: `IMPLEMENTED`
 Returns the Chama's financial transaction history (ledger transactions with
 their debit/credit entries). Any active member of the Chama.
 
-Returns a list of transactions, each with `entries` containing
-`account_id`, `account_code`, `account_name`, `debit`, and `credit`. Amounts
-are decimal strings with two decimal places.
+**Query parameters:**
+- `limit` (int, 1–100, default 25) — page size.
+- `cursor` (string, optional) — opaque cursor from a previous response.
 
-Returns 403 if the caller has no active membership, 404 if the Chama does not
-exist.
+**Response (`LedgerHistoryOut`):**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "chama_id": "uuid",
+      "source_type": "CONTRIBUTION",
+      "source_id": "uuid",
+      "description": "...",
+      "posted_by_user_id": "uuid",
+      "reverses_transaction_id": null,
+      "created_at": "2026-09-16T09:37:34",
+      "entries": [
+        {
+          "account_id": "uuid",
+          "account_code": "1000",
+          "account_name": "Cash",
+          "debit": "100.00",
+          "credit": "0.00"
+        }
+      ]
+    }
+  ],
+  "next_cursor": "eyJ0...",
+  "has_more": true
+}
+```
+
+Amounts are decimal strings with two decimal places. Cursor pagination is
+keyset-based on `(created_at DESC, id DESC)`. The cursor is a base64-encoded
+JSON object containing a timestamp and transaction ID.
+
+Returns 422 if the cursor is malformed, 403 if the caller has no active
+membership, 404 if the Chama does not exist.
 
 Posting rules: there is no public endpoint that writes to the ledger. Ledger
 entries are created only by the trusted posting service when an approved

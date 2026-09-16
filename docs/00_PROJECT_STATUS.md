@@ -22,7 +22,9 @@ The repository is now a working backend for:
   government-ID masking, JWT secret fail-closed, health/readiness endpoints
 
 V2 (Financial Core) has started. The immutable double-entry ledger
-foundation and financial transaction history are implemented (ADR-010..013).
+foundation and financial transaction history are implemented (ADR-010..015).
+V2 hardening has been applied: composite FKs, append-only DB triggers, CHECK
+constraints, cursor pagination, and idempotency conflict handling.
 Loans, repayments, and payouts are blocked by open questions
 (OQ-015..OQ-020).
 
@@ -34,7 +36,7 @@ uvicorn app.main:app --reload
 pytest
 ```
 
-All 81 tests pass. Swagger docs are available at `/docs`.
+All 109 tests pass. Swagger docs are available at `/docs`.
 
 ## Implemented
 
@@ -50,14 +52,17 @@ All 81 tests pass. Swagger docs are available at `/docs`.
   share endpoints
 - Server-side transactional membership numbers
 - V2 immutable double-entry ledger: accounts, transactions, entries
-- V2 ledger posting service with balance/side/non-negativity validation and
-  source-reference idempotency
-- V2 financial transaction history endpoint
+- V2 ledger posting service with balance/side/non-negativity validation,
+  quantization-before-validation, and source-reference idempotency
+- V2 financial transaction history endpoint with cursor pagination
 - V2 compensating-entry reversal for the ledger
+- V2 hardening: composite FKs, append-only DB triggers, CHECK constraints,
+  partial unique index for reversals, idempotency conflict handling,
+  reversal metadata validation (ADR-015)
 - Tests (auth, chamas, memberships, roles, registration fees,
   contributions, membership-number concurrency, identity-claim uniqueness,
   constraint backstop, JWT config, health, ledger posting/idempotency/
-  reversal/authorization)
+  reversal/authorization/db-enforcement/concurrency)
 - PostgreSQL test target (Docker Compose + CI workflow)
 - Approved decisions recorded in ADRs and `docs/decisions/`
 
@@ -75,8 +80,8 @@ All 81 tests pass. Swagger docs are available at `/docs`.
 
 ## Current milestone
 
-V2: Financial Core. In progress — ledger foundation delivered; loans,
-repayments, and payouts await decisions.
+V2: Financial Core. In progress — ledger foundation and V2 hardening
+delivered; loans, repayments, and payouts await decisions.
 
 Future versions (V3+ in `docs/08_ROADMAP.md`) describe direction only and
 must not be implemented now.
@@ -84,4 +89,10 @@ must not be implemented now.
 ## Official status statement
 
 > V1 implemented and hardened (66 tests). V2 Financial Core started: ledger
-> foundation and financial transaction history implemented (81 tests total).
+> foundation, financial transaction history, and V2 ledger hardening
+> implemented (109 tests total).
+```
+
+Reports: `reports/03_V2LedgerReviewReport.md` (independent review findings)
+and `reports/04_V2LedgerHardening.md` (evidence that findings were
+addressed).

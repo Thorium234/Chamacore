@@ -3,7 +3,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
@@ -38,6 +38,16 @@ class LedgerAccount(Base, UUIDMixin, TimestampMixin):
 
     __table_args__ = (
         UniqueConstraint("chama_id", "code", name="uq_ledger_accounts_chama_code"),
+        # Name/id unique target for ledger_entries composite ownership foreign keys.
+        UniqueConstraint("chama_id", "id", name="uq_ledger_accounts_chama_id"),
+        CheckConstraint(
+            "account_type IN ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')",
+            name="ck_ledger_accounts_type",
+        ),
+        CheckConstraint(
+            "length(trim(code)) > 0 AND length(trim(name)) > 0",
+            name="ck_ledger_accounts_non_blank",
+        ),
     )
 
     def __repr__(self) -> str:

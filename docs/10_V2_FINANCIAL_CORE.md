@@ -11,13 +11,17 @@ movement is represented as balanced ledger entries.
 
 ## Scope (this increment)
 
-This increment delivers the **ledger foundation**:
+This increment delivers the **ledger foundation** and **V2 hardening**:
 
 - The immutable double-entry ledger schema (ADR-010, ADR-011).
-- Ledger accounts (ADR-012).
+- Ledger accounts with CHECK constraints (ADR-012).
 - The trusted posting service with idempotency (ADR-012).
-- The financial transaction history read endpoint (ADR-013).
-- Tests and migrations for the ledger.
+- The financial transaction history read endpoint with cursor pagination
+  (ADR-013).
+- V2 hardening (ADR-015): composite FKs, DB triggers, partial unique index,
+  quantization-before-validation, idempotency conflict handling, reversal
+  metadata validation, account-type and non-blank CHECK constraints.
+- Tests, migrations, and dev-DB verification for the ledger.
 
 Loans, repayments, and payouts are documented below but are **blocked** by
 open questions and are not implemented.
@@ -34,7 +38,18 @@ See ADR-010.
 
 The ledger is append-only. Transactions and entries are never updated or
 deleted. Corrections are compensating transactions that invert the original
-and reference it (`reverses_transaction_id`). See ADR-011.
+and reference it (`reverses_transaction_id`).
+
+Immutability is enforced at **two layers**:
+
+1. **Application layer** — `LedgerRepository` has no update or delete methods.
+2. **Database layer** — SQLite and PostgreSQL triggers
+   (`trg_ledger_transactions_no_update`, `trg_ledger_transactions_no_delete`,
+   `trg_ledger_entries_no_update`, `trg_ledger_entries_no_delete`) raise
+   errors on UPDATE and DELETE. The `updated_at` column has been removed from
+   `ledger_transactions` and `ledger_entries`.
+
+See ADR-011.
 
 ## Debit/credit account types
 
@@ -93,7 +108,8 @@ questions above.
 
 Approved (ADR-012): `UNIQUE (source_type, source_id)` on ledger transactions.
 Posting the same source twice returns the existing transaction without side
-effects. This protects retries and duplicate events.
+effects. This protects retries and duplicate events. Conflicting retries
+(different amounts, accounts, description, or Chama) raise `ConflictError`.
 
 ## Decimal precision and rounding
 
@@ -121,45 +137,91 @@ actions is planned separately.
 
 ## Database design
 
-Three tables (migration delivered this increment):
+Three tables (initial migration + hardening migration delivered):
 
 ```text
 ledger_accounts       id, chama_id FK, code, name, account_type,
-                      UNIQUE(chama_id, code), timestamps
+                      UNIQUE(chama_id, code), UNIQUE(chama_id, id),
+                      CHECK(account_type IN (...)),
+                      CHECK(length(trim(code)) > 0 AND length(trim(name)) > 0),
+                      created_at, updated_at
 
 ledger_transactions   id, chama_id FK, source_type, source_id,
                       describes business event, posted_by_user_id FK,
-                      reverses_transaction_id FK (nullable),
-                      UNIQUE(source_type, source_id), timestamps
+                      reverses_transaction_id (nullable),
+                      UNIQUE(source_type, source_id),
+                      UNIQUE(chama_id, id),
+                      INDEX(chama_id, created_at),
+                      created_at (no updated_at)
 
-ledger_entries        id, transaction_id FK, account_id FK,
+ledger_entries        id, chama_id, transaction_id, account_id,
                       debit NUMERIC(18,2) >= 0, credit NUMERIC(18,2) >= 0,
                       checks: one side positive, not both,
-                      timestamps
+                      FK(chama_id, transaction_id) → ledger_transactions,
+                      FK(chama_id, account_id) → ledger_accounts,
+                      created_at (no updated_at)
 ```
 
-The unique `(source_type, source_id)` and the side/absence checks are
-database-level backstops for the service rules.
+### Chama ownership enforcement (V2-003)
+
+All ledger tables are Chama-scoped. `ledger_entries` carries a denormalized
+`chama_id` to support composite foreign keys:
+
+- `FK(chama_id, transaction_id) → ledger_transactions(chama_id, id)`
+- `FK(chama_id, account_id) → ledger_accounts(chama_id, id)`
+
+The self-referencing reversal FK is also composite:
+`FK(chama_id, reverses_transaction_id) → ledger_transactions(chama_id, id)`
+
+### Immutability enforcement (V2-004)
+
+- `updated_at` removed from `ledger_transactions` and `ledger_entries`.
+- SQLite: `BEFORE UPDATE` and `BEFORE DELETE` triggers raise errors.
+- PostgreSQL: `BEFORE UPDATE` and `BEFORE DELETE` triggers raise errors.
+- PostgreSQL: deferred constraint triggers verify balanced transactions and
+  entries at commit time (V2-005).
+
+### Account constraints (V2-007)
+
+- `account_type IN ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')`
+  enforced by CHECK constraint (not just the Python Enum).
+- `length(trim(code)) > 0 AND length(trim(name)) > 0` — no blank codes or
+  names.
+
+### Reversal uniqueness (V2-006)
+
+- Partial unique index `uq_ledger_transactions_reversal` on
+  `reverses_transaction_id` WHERE `reverses_transaction_id IS NOT NULL`
+  prevents a second reversal of the same transaction at the database level.
+
+The unique `(source_type, source_id)`, the side/absence checks, and the
+composite foreign keys are database-level backstops for the service rules.
 
 ## API surface (this increment)
 
 | Method | Path | Authorization | Status |
 | --- | --- | --- | --- |
-| `GET` | `/api/v1/chamas/{chama_id}/ledger` | active member | implement |
+| `GET` | `/api/v1/chamas/{chama_id}/ledger?limit=1..100&cursor=` | active member | implemented |
+
+Returns `LedgerHistoryOut` with `items` (list of `LedgerTransactionOut`), `next_cursor` (nullable base64 cursor), and `has_more` (bool). Cursor pagination is keyset-based on `(created_at DESC, id DESC)`.
 
 No posting, reversal, or account-management endpoints are exposed publicly.
 
 ## Implementation order
 
 1. Design + ADRs (this document, ADR-010..ADR-014).
-2. Ledger schema and posting service + tests + migration. **— this increment**
-3. Verified: 66 V1 tests still pass; migrations apply on SQLite (and
+2. Ledger schema and posting service + tests + migration. **— delivered**
+3. Verified: all V1 tests still pass; migrations apply on SQLite (and
    PostgreSQL in CI).
-4. Connect confirmed contributions to the ledger — **blocked** by OQ-012 /
+4. V2 ledger hardening (ADR-015): composite FKs, DB triggers, CHECK
+   constraints, partial unique index, cursor pagination, quantization-before-
+   validation, idempotency conflict handling, reversal metadata validation.
+   **— delivered** (reports/03_V2LedgerReviewReport.md, reports/04).
+5. Connect confirmed contributions to the ledger — **blocked** by OQ-012 /
    OQ-013.
-5. Loans and repayments — **blocked** by OQ-015..OQ-018.
-6. Payouts — **blocked** by OQ-019 / OQ-020.
-7. General audit events for sensitive financial actions — later.
+6. Loans and repayments — **blocked** by OQ-015..OQ-018.
+7. Payouts — **blocked** by OQ-019 / OQ-020.
+8. General audit events for sensitive financial actions — later.
 
 ## Explicitly marked unresolved
 

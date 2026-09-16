@@ -84,6 +84,23 @@ PostgreSQL was not runnable in this environment (no Docker); the V2 migration
 is dialect-neutral (`sa.Uuid`, `VARCHAR` enums, portable CHECK constraints)
 and the existing CI PostgreSQL jobs will exercise it on main.
 
+## Addendum (V2 hardening, 2026-09-16)
+
+This report described the initial V2 foundation. The ledger has since been
+hardened per `reports/03_V2LedgerReviewReport.md` (ADR-015,
+`reports/04_V2LedgerHardening.md`):
+
+```text
+109 passed                          (SQLite, dev)
+Concurrency: 2 passed               (SQLite, dev)
+alembic upgrade head (dev chamacore.db) -> applied d1e2f3a4b5c6
+alembic check                       -> "No new upgrade operations detected."
+```
+
+PostgreSQL remains un-runnable in this environment (no Docker); PG trigger,
+constraint, and migration paths are exercised by the `test-postgres` and
+`concurrency-postgres` CI jobs.
+
 ## What remains blocked
 
 - **Connecting confirmed contributions to the ledger** — blocked by OQ-012

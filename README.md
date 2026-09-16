@@ -18,8 +18,10 @@ The long-term system is intended to support:
 ## Current status
 
 V1 (Chama Foundation) is implemented. V2 (Financial Core) is in progress:
-the immutable double-entry ledger foundation and financial transaction
-history are implemented. All 81 automated tests pass.
+the immutable double-entry ledger foundation, financial transaction history,
+and V2 ledger hardening (composite FKs, append-only DB triggers, CHECK
+constraints, cursor pagination, idempotency conflict handling) are
+implemented. All 109 automated tests pass.
 
 ### Quick start
 
@@ -47,7 +49,11 @@ API docs are available at `/docs`. Run the test suite with `pytest`.
 - 66 automated tests (V1)
 - V2 ledger foundation: immutable double-entry ledger, financial transaction
   history, trusted posting service with idempotency and compensating
-  corrections (15 additional tests)
+  corrections (43 additional tests)
+- V2 ledger hardening: composite Chama-ownership foreign keys, append-only
+  triggers, account-type/non-blank CHECK constraints, one-reversal-per-
+  transaction partial unique index, cursor pagination, quantization-before-
+  validation, idempotency conflict handling
 
 ### Not implemented (V2+, blocked or deferred)
 
