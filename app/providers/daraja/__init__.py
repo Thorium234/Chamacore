@@ -1,0 +1,1 @@
+"""Daraja provider adapter package."""

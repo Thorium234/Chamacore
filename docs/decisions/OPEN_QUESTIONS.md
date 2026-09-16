@@ -55,6 +55,30 @@ Decision: Outside development mode (`CHAMACORE_DEBUG=false`),
 `CHAMACORE_JWT_SECRET_KEY` must be set; the known default secret is rejected
 at configuration load.
 
+### OQ-012 through OQ-020: V2 financial core
+
+Decisions: See `docs/10_V2_FINANCIAL_CORE.md`. These remain open for V2
+(V2 ledger hardening is complete; chart-of-accounts seeding, contribution
+posting, registration fee payments, loan rules, and payout rules are still
+blocked).
+
+## Resolved (V3)
+
+### V3 payment architecture
+
+Decision: ADR-016 (provider port and adapters), ADR-017 (connection
+lifecycle), ADR-018 (webhook inbox and event deduplication).
+
+V3 delivers a provider-port boundary (Jenga and Daraja adapters), sealed
+payment connections with a chairperson-controlled lifecycle, a payment
+intent/attempt state machine, and a deduplicated, append-only webhook inbox.
+All decisions are recorded in the three ADRs above; no V3 payment open
+questions remain.
+
+Connecting confirmed contributions to the ledger (OQ-012/OQ-013) and loan,
+repayment, and payout flows (OQ-015..OQ-020) are still blocked by their
+respective V2 open questions and are not part of V3.
+
 ## Open (V2)
 
 ### OQ-012: Chama chart of accounts — creation and maintenance

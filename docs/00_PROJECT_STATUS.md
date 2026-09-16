@@ -21,12 +21,18 @@ The repository is now a working backend for:
 - V1 hardening: identity-claim uniqueness, DB-level constraint backstops,
   government-ID masking, JWT secret fail-closed, health/readiness endpoints
 
-V2 (Financial Core) has started. The immutable double-entry ledger
-foundation and financial transaction history are implemented (ADR-010..015).
-V2 hardening has been applied: composite FKs, append-only DB triggers, CHECK
-constraints, cursor pagination, and idempotency conflict handling.
+V2 (Financial Core) is implemented. The immutable double-entry ledger
+foundation, financial transaction history, and V2 ledger hardening
+(composite FKs, append-only DB triggers, CHECK constraints, cursor
+pagination, idempotency conflict handling) are delivered (ADR-010..015).
+
+V3 (Payment Architecture) is implemented (ADR-016..018): a provider-port
+boundary with Jenga and Daraja adapters, sealed payment connections with a
+chairperson-controlled lifecycle, payment intent/attempt state machines,
+and a deduplicated, append-only webhook inbox.
+
 Loans, repayments, and payouts are blocked by open questions
-(OQ-015..OQ-020).
+(OQ-015..OQ-020), as is contribution-to-ledger posting (OQ-012/OQ-013).
 
 ## Currently executable
 
@@ -36,15 +42,18 @@ uvicorn app.main:app --reload
 pytest
 ```
 
-All 109 tests pass. Swagger docs are available at `/docs`.
+All 226 tests pass on SQLite; native PostgreSQL concurrency and trigger
+paths run in CI. Swagger docs are available at `/docs`.
 
 ## Implemented
 
 - Application package structure (`app/`)
 - Configuration via Pydantic settings
-- SQLAlchemy 2.x models (10 V1 tables + 3 V2 ledger tables)
+- SQLAlchemy 2.x models (10 V1 tables + 3 V2 ledger tables + 6 V3 payment
+  tables)
 - Database sessions
-- Alembic migrations (initial V1 schema, V1 unique constraints, V2 ledger)
+- Alembic migrations (initial V1 schema, V1 unique constraints, V2 ledger,
+  V2 ledger hardening, V3 payment tables)
 - SQLite for development; PostgreSQL support for production
 - Authentication (register, token, me, member-link)
 - Authorization (membership-based, verified per Chama-scoped query)
@@ -59,10 +68,20 @@ All 109 tests pass. Swagger docs are available at `/docs`.
 - V2 hardening: composite FKs, append-only DB triggers, CHECK constraints,
   partial unique index for reversals, idempotency conflict handling,
   reversal metadata validation (ADR-015)
+- V3 provider port and provider registry (ADR-016)
+- V3 Jenga and Daraja adapters (STK Push, status query, callback parsing)
+  with mocked HTTP contract tests
+- V3 payment connection lifecycle with AES-256-GCM sealed credentials,
+  chairperson authorization, validation, and audit trail (ADR-017)
+- V3 payment intent/attempt state machines with retry, timeout, and
+  idempotency handling
+- V3 webhook inbox with database-backed deduplication and disagreement
+  detection (ADR-018)
 - Tests (auth, chamas, memberships, roles, registration fees,
   contributions, membership-number concurrency, identity-claim uniqueness,
   constraint backstop, JWT config, health, ledger posting/idempotency/
-  reversal/authorization/db-enforcement/concurrency)
+  reversal/authorization/db-enforcement/concurrency, credential cipher,
+  payment connections, payment intents, payment webhooks, provider adapters)
 - PostgreSQL test target (Docker Compose + CI workflow)
 - Approved decisions recorded in ADRs and `docs/decisions/`
 
@@ -71,28 +90,27 @@ All 109 tests pass. Swagger docs are available at `/docs`.
 - Loans, loan repayments, payouts (blocked by OQ-015..OQ-020)
 - Connecting confirmed contributions to the ledger (blocked by OQ-012/OQ-013)
 - Registration-fee payments on the ledger (blocked by OQ-014)
+- Live Jenga/Daraja sandbox integration tests (requires live test accounts)
 - Frontend
-- Payment integrations
-- Reconciliation
+- Bank reconciliation
 - Reports
 - Notifications
 - USSD
 
 ## Current milestone
 
-V2: Financial Core. In progress — ledger foundation and V2 hardening
-delivered; loans, repayments, and payouts await decisions.
-
-Future versions (V3+ in `docs/08_ROADMAP.md`) describe direction only and
-must not be implemented now.
+V3: Payment Architecture is implemented (ADR-016..018). Contribution
+confirmation, ledger posting, loans, repayments, and payouts await the
+remaining V2 financial decisions (OQ-012..OQ-020).
 
 ## Official status statement
 
-> V1 implemented and hardened (66 tests). V2 Financial Core started: ledger
-> foundation, financial transaction history, and V2 ledger hardening
-> implemented (109 tests total).
-```
+> V1 implemented and hardened (66 tests). V2 Financial Core implemented:
+> ledger foundation, financial transaction history, and V2 ledger hardening
+> (109 tests at that point). V3 Payment Architecture implemented:
+> provider port (Jenga + Daraja), sealed payment connections, intent/attempt
+> state machines, webhook inbox (226 tests total).
 
-Reports: `reports/03_V2LedgerReviewReport.md` (independent review findings)
-and `reports/04_V2LedgerHardening.md` (evidence that findings were
-addressed).
+Reports: `reports/03_V2LedgerReviewReport.md` (independent review findings),
+`reports/04_V2LedgerHardening.md` (evidence that findings were addressed),
+and `reports/05_v3_payment_architecture.md` (V3 implementation evidence).

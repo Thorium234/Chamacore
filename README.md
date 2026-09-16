@@ -21,7 +21,11 @@ V1 (Chama Foundation) is implemented. V2 (Financial Core) is in progress:
 the immutable double-entry ledger foundation, financial transaction history,
 and V2 ledger hardening (composite FKs, append-only DB triggers, CHECK
 constraints, cursor pagination, idempotency conflict handling) are
-implemented. All 109 automated tests pass.
+implemented. V3 (Payment Architecture) is implemented: provider-port
+boundary, Jenga and Daraja adapters, payment connection lifecycle, payment
+intent/attempt state machines, and a deduplicated webhook inbox.
+All 226 automated tests pass; native PostgreSQL concurrency and trigger
+paths are additionally run in CI.
 
 ### Quick start
 
@@ -54,6 +58,11 @@ API docs are available at `/docs`. Run the test suite with `pytest`.
   triggers, account-type/non-blank CHECK constraints, one-reversal-per-
   transaction partial unique index, cursor pagination, quantization-before-
   validation, idempotency conflict handling
+- V3 payment architecture: provider-port boundary (ADR-016), payment
+  connection lifecycle (ADR-017), webhook inbox and event deduplication
+  (ADR-018), AES-GCM sealed credentials, Jenga and Daraja adapter contract
+  tests (MockTransport), payment intent/attempt state machines with retry
+  and timeout handling
 
 ### Not implemented (V2+, blocked or deferred)
 
@@ -61,7 +70,6 @@ API docs are available at `/docs`. Run the test suite with `pytest`.
 - Contribution-to-ledger posting (blocked by open questions)
 - Ledger-backed balances/reports
 - Audit event table
-- Payments, webhooks, payment providers
 - Bank reconciliation
 - Notifications
 - React, React Native, USSD
@@ -93,6 +101,8 @@ Before changing code, read:
 7. `docs/05_ARCHITECTURE.md`
 8. `docs/06_API_CONTRACT.md`
 9. `docs/08_ROADMAP.md`
+10. `docs/10_V2_FINANCIAL_CORE.md`
+11. `docs/11_V3_PAYMENT_ARCHITECTURE.md`
 
 Accepted decisions are in `docs/decisions/`.
 

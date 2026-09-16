@@ -28,3 +28,13 @@ class PermissionDeniedError(AppError):
 class StateError(AppError):
     status_code = 400
     code = "INVALID_STATE"
+
+
+class RateLimitError(AppError):
+    status_code = 429
+    code = "RATE_LIMITED"
+
+
+class WebhookRejectedError(AppError):
+    status_code = 400
+    code = "WEBHOOK_REJECTED"

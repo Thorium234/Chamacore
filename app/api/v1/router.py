@@ -8,6 +8,8 @@ from app.api.v1 import (
     contributions,
     ledger,
     memberships,
+    payments,
+    payments_webhooks,
     registration_fees,
     roles,
     shares,
@@ -22,3 +24,5 @@ api_router.include_router(registration_fees.router)
 api_router.include_router(contributions.router)
 api_router.include_router(shares.router)
 api_router.include_router(ledger.router)
+api_router.include_router(payments.router)
+api_router.include_router(payments_webhooks.router)
