@@ -2,7 +2,21 @@
 
 ## Status date
 
-2026-09-16
+2026-09-17
+
+## Status note (17 Sep 2026)
+
+Following the independent code-review reports (`reports/Overall_ChamaCore_
+Code_Review_Report.md`, `reports/Afternoon_ChamaCore_Code_Review_Report.md`),
+the following hardening/observability work landed on `main`:
+
+- Auth and general API rate limiting (in-process, per client IP)
+- Reversal idempotency ordering fix in the ledger posting path
+- Payment status-query retryable-flag fix (permanent vs transient failures)
+- Single-line JSON structured logs with `X-Request-ID` correlation ids
+- Prometheus `/metrics` endpoint (HTTP counters + latency histograms)
+- Production runbook, Dockerfile, Docker Compose app service, dependency
+  split with a pinned lockfile
 
 ## Final verdict
 
@@ -42,7 +56,7 @@ uvicorn app.main:app --reload
 pytest
 ```
 
-All 226 tests pass on SQLite; native PostgreSQL concurrency and trigger
+All 235 tests pass on SQLite; native PostgreSQL concurrency and trigger
 paths run in CI. Swagger docs are available at `/docs`.
 
 ## Implemented
@@ -77,6 +91,15 @@ paths run in CI. Swagger docs are available at `/docs`.
   idempotency handling
 - V3 webhook inbox with database-backed deduplication and disagreement
   detection (ADR-018)
+- Structured logging: single-line JSON with `X-Request-ID` correlation ids
+  echoed on request/response (middleware + `app/core/logging.py`)
+- Prometheus-exposition `/metrics` endpoint with HTTP request counters and
+  latency histograms, bounded route-template labels (`app/core/metrics.py`)
+- General per-IP API rate limiting beyond auth, plus the existing
+  auth/payment/webhook limits (all in-process)
+- Production runbook (`docs/12_PRODUCTION_RUNBOOK.md`), application
+  `Dockerfile`, Docker Compose app service, and runtime/dev dependency split
+  with `requirements.lock.txt`
 - Tests (auth, chamas, memberships, roles, registration fees,
   contributions, membership-number concurrency, identity-claim uniqueness,
   constraint backstop, JWT config, health, ledger posting/idempotency/
@@ -109,8 +132,14 @@ remaining V2 financial decisions (OQ-012..OQ-020).
 > ledger foundation, financial transaction history, and V2 ledger hardening
 > (109 tests at that point). V3 Payment Architecture implemented:
 > provider port (Jenga + Daraja), sealed payment connections, intent/attempt
-> state machines, webhook inbox (226 tests total).
+> state machines, webhook inbox. 17 Sep hardening: auth + general API rate
+> limits, ledger reversal idempotency, payment retryable-flag fix, JSON
+> structured logs with correlation ids, Prometheus `/metrics` endpoint,
+> production runbook, Docker Compose app service (235 tests total).
 
 Reports: `reports/03_V2LedgerReviewReport.md` (independent review findings),
 `reports/04_V2LedgerHardening.md` (evidence that findings were addressed),
-and `reports/05_v3_payment_architecture.md` (V3 implementation evidence).
+`reports/05_v3_payment_architecture.md` (V3 implementation evidence),
+`reports/Overall_ChamaCore_Code_Review_Report.md` (17 Sep morning review),
+and `reports/Afternoon_ChamaCore_Code_Review_Report.md` (17 Sep afternoon
+re-review whose remaining technical items are implemented above).

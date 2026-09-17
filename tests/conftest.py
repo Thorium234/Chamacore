@@ -8,7 +8,8 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-from app.api.deps import oauth2_scheme, reset_auth_rate_limiters
+from app.api.deps import oauth2_scheme, reset_rate_limiters
+from app.core.metrics import reset_metrics
 from app.db.base import Base
 from app.db.ledger_guards import create_ledger_guards
 from app.db.session import get_db
@@ -31,9 +32,10 @@ def _seed_roles(session):
 
 
 @pytest.fixture(autouse=True)
-def _reset_auth_rate_limits():
-    """Give every test a clean auth rate-limit budget."""
-    reset_auth_rate_limiters()
+def _reset_rate_limits_and_metrics():
+    """Give every test a clean in-process rate-limit and metrics budget."""
+    reset_rate_limiters()
+    reset_metrics()
     yield
 
 

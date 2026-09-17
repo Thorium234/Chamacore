@@ -24,7 +24,7 @@ constraints, cursor pagination, idempotency conflict handling) are
 implemented. V3 (Payment Architecture) is implemented: provider-port
 boundary, Jenga and Daraja adapters, payment connection lifecycle, payment
 intent/attempt state machines, and a deduplicated webhook inbox.
-All 226 automated tests pass; native PostgreSQL concurrency and trigger
+All 235 automated tests pass; native PostgreSQL concurrency and trigger
 paths are additionally run in CI.
 
 ### Quick start
@@ -32,12 +32,14 @@ paths are additionally run in CI.
 ```bash
 python -m venv env
 source env/bin/activate     # macOS/Linux; on Windows (PowerShell): env\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements.txt       # runtime; add requirements-dev.txt for tests
+pip install -r requirements.lock.txt  # optional: reproducible locked environment
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
 API docs are available at `/docs`. Run the test suite with `pytest`.
+Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
 
 ### Implemented
 
@@ -63,6 +65,12 @@ API docs are available at `/docs`. Run the test suite with `pytest`.
   (ADR-018), AES-GCM sealed credentials, Jenga and Daraja adapter contract
   tests (MockTransport), payment intent/attempt state machines with retry
   and timeout handling
+- Observability: single-line JSON structured logs with `X-Request-ID`
+  correlation ids echoed on responses, Prometheus `/metrics` endpoint,
+  general per-IP API rate limiting beyond auth
+- Operation: production runbook (`docs/12_PRODUCTION_RUNBOOK.md`),
+  `Dockerfile` + Docker Compose app service, split runtime/dev dependency
+  files with a pinned lockfile
 
 ### Not implemented (V2+, blocked or deferred)
 
@@ -88,6 +96,9 @@ export CHAMACORE_DATABASE_URL="postgresql+psycopg://user:pass@host:5432/dbname"
 The application will refuse to start if `CHAMACORE_DEBUG` is false and
 the JWT secret is still the local-development default.
 
+See `docs/12_PRODUCTION_RUNBOOK.md` for the full environment variable table,
+migrations, secrets, backups, and monitoring guidance.
+
 ## Documentation source of truth
 
 Before changing code, read:
@@ -103,6 +114,7 @@ Before changing code, read:
 9. `docs/08_ROADMAP.md`
 10. `docs/10_V2_FINANCIAL_CORE.md`
 11. `docs/11_V3_PAYMENT_ARCHITECTURE.md`
+12. `docs/12_PRODUCTION_RUNBOOK.md`
 
 Accepted decisions are in `docs/decisions/`.
 

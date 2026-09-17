@@ -29,6 +29,21 @@ Status: `IMPLEMENTED`
 
 Returns `{"status": "ready"}`. Verifies database connectivity.
 
+### `GET /metrics`
+
+Status: `IMPLEMENTED`
+
+Returns a Prometheus text exposition of process-level HTTP metrics
+(`chamacore_http_requests_total`, `chamacore_http_request_duration_seconds_*`)
+with bounded route-template labels. No authentication; intended for an
+internal monitoring scraper only.
+
+## Request correlation
+
+Every response carries an `X-Request-ID` header. If the client supplied one
+on the request, it is echoed back; otherwise the server generates one. All
+log records for the request carry the same value.
+
 ## Authentication
 
 ### `POST /api/v1/auth/register`

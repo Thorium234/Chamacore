@@ -1,7 +1,8 @@
 """Aggregates all V1 routers."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.api.deps import check_general_rate_limit
 from app.api.v1 import (
     auth,
     chamas,
@@ -15,7 +16,7 @@ from app.api.v1 import (
     shares,
 )
 
-api_router = APIRouter()
+api_router = APIRouter(dependencies=[Depends(check_general_rate_limit)])
 api_router.include_router(auth.router)
 api_router.include_router(chamas.router)
 api_router.include_router(memberships.router)

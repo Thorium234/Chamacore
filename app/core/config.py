@@ -50,7 +50,10 @@ class Settings(BaseSettings):
     # the local uvicorn server.
     public_base_url: str = "http://localhost:8000"
 
-    # General API rate limits for unauthenticated auth endpoints (report 2.4).
+    # General API rate limits (report 2.4). The auth/register, auth/token and
+    # member-link limits are strict by design; the general API limit guards the
+    # rest of the router. All are single-process (in-memory) limiters.
+    general_api_per_minute_limit: int = 300
     auth_register_per_minute_limit: int = 10
     auth_token_per_minute_limit: int = 30
     auth_member_link_per_minute_limit: int = 10

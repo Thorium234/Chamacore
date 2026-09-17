@@ -24,19 +24,30 @@ INVALID_CREDENTIALS = HTTPException(
     headers={"WWW-Authenticate": "Bearer"},
 )
 
+_general_limiter = RateLimiter(get_settings().general_api_per_minute_limit, 60.0)
 _register_limiter = RateLimiter(get_settings().auth_register_per_minute_limit, 60.0)
 _token_limiter = RateLimiter(get_settings().auth_token_per_minute_limit, 60.0)
 _member_link_limiter = RateLimiter(get_settings().auth_member_link_per_minute_limit, 60.0)
 
 
-def reset_auth_rate_limiters() -> None:
-    """Clear auth limiter windows between test cases."""
-    for limiter in (_register_limiter, _token_limiter, _member_link_limiter):
+def reset_rate_limiters() -> None:
+    """Clear in-process limiter windows between tests."""
+    for limiter in (
+        _general_limiter,
+        _register_limiter,
+        _token_limiter,
+        _member_link_limiter,
+    ):
         limiter.reset()
 
 
 def _client_host_key(request: Request) -> str:
     return request.client.host if request.client is not None else "unknown"
+
+
+def check_general_rate_limit(request: Request) -> None:
+    if not _general_limiter.allow(_client_host_key(request)):
+        raise RateLimitError("Too many API requests; try again shortly")
 
 
 def check_register_rate_limit(request: Request) -> None:

@@ -1,0 +1,5 @@
+# Development and test dependencies (installs the runtime set too).
+-r requirements.txt
+
+pytest==9.1.1
+httpx==0.28.1
