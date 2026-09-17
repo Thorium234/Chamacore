@@ -600,13 +600,13 @@ def test_post_reversal_source_requires_reference(client, db):
     assert "must reference the transaction it reverses" in str(exc.value)
 
 
-def test_post_direct_reversal_twice_conflicts(client, db):
+def test_post_same_direct_reversal_is_idempotent(client, db):
     headers, chama_id, cash, equity = _setup(client, db)
     actor = _get_user(db, "user@example.com")
     service = LedgerService(db)
     txn = _post(db, actor, chama_id, cash.id, equity.id)
 
-    service.post_transaction(
+    first = service.post_transaction(
         actor=actor,
         chama_id=chama_id,
         source_type=REVERSAL_SOURCE_TYPE,
@@ -619,20 +619,19 @@ def test_post_direct_reversal_twice_conflicts(client, db):
         ],
     )
 
-    with pytest.raises(ConflictError) as exc:
-        service.post_transaction(
-            actor=actor,
-            chama_id=chama_id,
-            source_type=REVERSAL_SOURCE_TYPE,
-            source_id=txn.id,
-            description="reversal",
-            reverses_transaction_id=txn.id,
-            lines=[
-                LedgerLine(account_id=cash.id, credit=Decimal("100.00")),
-                LedgerLine(account_id=equity.id, debit=Decimal("100.00")),
-            ],
-        )
-    assert "already been reversed" in str(exc.value)
+    again = service.post_transaction(
+        actor=actor,
+        chama_id=chama_id,
+        source_type=REVERSAL_SOURCE_TYPE,
+        source_id=txn.id,
+        description="reversal",
+        reverses_transaction_id=txn.id,
+        lines=[
+            LedgerLine(account_id=cash.id, credit=Decimal("100.00")),
+            LedgerLine(account_id=equity.id, debit=Decimal("100.00")),
+        ],
+    )
+    assert again.id == first.id
     assert len(service.list_by_chama(actor=actor, chama_id=chama_id)) == 2
 
 
@@ -656,17 +655,21 @@ def test_reversal_creates_compensating_transaction(client, db):
     assert len(all_txns) == 2
 
 
-def test_double_reversal_rejected(client, db):
+def test_double_reverse_is_idempotent(client, db):
     headers, chama_id, cash, equity = _setup(client, db)
     actor = _get_user(db, "user@example.com")
     service = LedgerService(db)
     txn = _post(db, actor, chama_id, cash.id, equity.id)
 
-    service.reverse_transaction(actor=actor, chama_id=chama_id, transaction_id=txn.id)
+    first = service.reverse_transaction(
+        actor=actor, chama_id=chama_id, transaction_id=txn.id
+    )
+    again = service.reverse_transaction(
+        actor=actor, chama_id=chama_id, transaction_id=txn.id
+    )
 
-    with pytest.raises(ConflictError) as exc:
-        service.reverse_transaction(actor=actor, chama_id=chama_id, transaction_id=txn.id)
-    assert "already been reversed" in str(exc.value).lower()
+    assert again.id == first.id
+    assert len(service.list_by_chama(actor=actor, chama_id=chama_id)) == 2
 
 
 def test_reversal_of_reversal_rejected(client, db):

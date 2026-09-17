@@ -61,14 +61,14 @@ class LedgerService:
             )
         if reverses_transaction_id is not None and source_type != REVERSAL_SOURCE_TYPE:
             raise StateError("A reversal reference requires the approved reversal source type")
-        if reverses_transaction_id is not None:
-            self._validate_reversal_reference(chama.id, reverses_transaction_id)
 
         existing = self.ledger.get_by_source(source_type, source_id)
         if existing is not None:
             return self._resolve_idempotent_retry(
                 existing, chama.id, description, reverses_transaction_id, lines
             )
+        if reverses_transaction_id is not None:
+            self._validate_reversal_reference(chama.id, reverses_transaction_id)
 
         try:
             transaction = self.ledger.create_transaction(
@@ -109,9 +109,6 @@ class LedgerService:
 
         if transaction.reverses_transaction_id is not None:
             raise StateError("A reversal transaction cannot be reversed")
-
-        if self.ledger.get_reversal_for(transaction.id) is not None:
-            raise ConflictError("This ledger transaction has already been reversed")
 
         lines = [
             LedgerLine(account_id=entry.account_id, debit=entry.credit, credit=entry.debit)

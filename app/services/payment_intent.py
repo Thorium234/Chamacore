@@ -295,7 +295,7 @@ class PaymentIntentService:
             if self._query_and_resolve(last, connection, shaped, context):
                 if last.status == PaymentAttemptStatus.SUCCEEDED:
                     return last
-                last.retryable = True
+                last.retryable = last.failure_code not in PERMANENT_FAILURE_CODES
                 self.db.commit()
             else:
                 # Outcome still unknown: never create a duplicate charge.

@@ -315,6 +315,51 @@ class TestInitiate:
         assert second.json()["id"] == first["id"]
         assert second.json()["status"] == "TIMEOUT"
 
+    def test_permanent_status_query_failure_fails_intent(self, client, fake_jenga, db):
+        headers, chama, member, conn = _scenario(client, fake_jenga)
+        intent = _create_intent(client, headers, chama["id"], member["id"])
+        first = _initiate(client, headers, chama["id"], intent["id"], conn["id"]).json()
+        assert first["status"] == "INITIATED"
+        fake_jenga.query_results[first["provider_request_id"]] = StatusQueryResult(
+            found=True,
+            provider_request_id=first["provider_request_id"],
+            normalized_status=_PTS.FAILED,
+            error_code="AUTH_FAILED",
+            error_message_safe="credentials rejected",
+        )
+        again = _initiate(client, headers, chama["id"], intent["id"], conn["id"])
+        assert again.status_code == 400
+        assert "new payment intent" in again.json()["detail"]["message"].lower()
+        row = db.scalar(
+            select(PaymentIntent).where(PaymentIntent.id == uuid.UUID(intent["id"]))
+        )
+        assert row.status.value == "FAILED"
+
+    def test_retryable_status_query_failure_creates_second_attempt(
+        self, client, fake_jenga, db
+    ):
+        headers, chama, member, conn = _scenario(client, fake_jenga)
+        intent = _create_intent(client, headers, chama["id"], member["id"])
+        first = _initiate(client, headers, chama["id"], intent["id"], conn["id"]).json()
+        fake_jenga.query_results[first["provider_request_id"]] = StatusQueryResult(
+            found=True,
+            provider_request_id=first["provider_request_id"],
+            normalized_status=_PTS.FAILED,
+            error_code="PROVIDER_UNREACHABLE",
+            error_message_safe="provider unreachable",
+        )
+        second = _initiate(client, headers, chama["id"], intent["id"], conn["id"])
+        assert second.status_code == 200
+        body = second.json()
+        assert body["attempt_number"] == 2
+        assert body["status"] == "INITIATED"
+        attempts = db.scalars(
+            select(PaymentAttempt).where(
+                PaymentAttempt.payment_intent_id == uuid.UUID(intent["id"])
+            )
+        ).all()
+        assert len(attempts) == 2
+
     def test_failed_intent_cannot_be_restarted(self, client, fake_jenga):
         headers, chama, member, conn = _scenario(client, fake_jenga)
         intent = _create_intent(client, headers, chama["id"], member["id"])
