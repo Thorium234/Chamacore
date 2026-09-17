@@ -25,6 +25,8 @@ Documented provider behaviour (recorded per mission requirement):
 
 import base64
 import re
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
@@ -65,6 +67,11 @@ DARAJA_CAPABILITIES = frozenset(
     {"STK_PUSH", "PAYMENT_STATUS_QUERY", "CALLBACKS"}
 )
 
+# Daraja OAuth tokens last ~1 hour. Cache per consumer key for well under
+# that (50 minutes) so repeated STK Push/status-query calls in a window do
+# not re-request a token on every call.
+TOKEN_CACHE_TTL_SECONDS = 50 * 60
+
 
 def normalize_phone(raw: str) -> str:
     """Normalize a Kenyan phone to 2547XXXXXXXX (12 digits) form."""
@@ -101,6 +108,11 @@ class DarajaAdapter(ProviderPort):
             self._http._client = http_client
         else:
             self._http = ProviderHttpClient(base_url, timeout)
+        # Token cache is per adapter instance. The provider registry holds one
+        # Sandbox and one Production adapter for the process, so production
+        # traffic shares the cache while tests (fresh instances) stay isolated.
+        self._token_cache: dict[str, tuple[str, float]] = {}
+        self._token_lock = threading.Lock()
 
     @property
     def spec(self) -> ProviderSpec:
@@ -168,6 +180,11 @@ class DarajaAdapter(ProviderPort):
         )
 
     def _access_token(self, consumer_key: str, consumer_secret: str) -> str | None:
+        now = time.monotonic()
+        with self._token_lock:
+            cached = self._token_cache.get(consumer_key)
+            if cached is not None and cached[1] > now:
+                return cached[0]
         credentials = base64.b64encode(
             f"{consumer_key}:{consumer_secret}".encode()
         ).decode("ascii")
@@ -181,19 +198,30 @@ class DarajaAdapter(ProviderPort):
             },
         )
         if response.status_code != 200:
+            with self._token_lock:
+                self._token_cache.pop(consumer_key, None)
             raise ProviderIntegrationError(
                 "AUTH_FAILED", "Daraja OAuth token request failed"
             )
         try:
             payload = response.json()
         except ValueError as exc:
+            with self._token_lock:
+                self._token_cache.pop(consumer_key, None)
             raise ProviderIntegrationError(
                 "AUTH_MALFORMED", "Daraja OAuth response was not JSON"
             ) from exc
         token = payload.get("access_token")
         if not isinstance(token, str) or not token:
+            with self._token_lock:
+                self._token_cache.pop(consumer_key, None)
             raise ProviderIntegrationError(
                 "AUTH_MALFORMED", "Daraja OAuth response did not include an access token"
+            )
+        with self._token_lock:
+            self._token_cache[consumer_key] = (
+                token,
+                time.monotonic() + TOKEN_CACHE_TTL_SECONDS,
             )
         return token
 

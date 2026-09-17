@@ -41,9 +41,10 @@ foundation, financial transaction history, and V2 ledger hardening
 pagination, idempotency conflict handling) are delivered (ADR-010..015).
 
 V3 (Payment Architecture) is implemented (ADR-016..018): a provider-port
-boundary with Jenga and Daraja adapters, sealed payment connections with a
-chairperson-controlled lifecycle, payment intent/attempt state machines,
-and a deduplicated, append-only webhook inbox.
+boundary with the Daraja adapter (Jenga code retained but unregistered since
+17 Sep 2026 — Daraja is the only active provider), sealed payment connections
+with a chairperson-controlled lifecycle, payment intent/attempt state
+machines, and a deduplicated, append-only webhook inbox.
 
 Loans, repayments, and payouts are blocked by open questions
 (OQ-015..OQ-020), as is contribution-to-ledger posting (OQ-012/OQ-013).
@@ -56,8 +57,9 @@ uvicorn app.main:app --reload
 pytest
 ```
 
-All 235 tests pass on SQLite; native PostgreSQL concurrency and trigger
-paths run in CI. Swagger docs are available at `/docs`.
+Of 238 tests, 211 pass on SQLite and 27 Jenga adapter contract tests are
+deferred (skipped); native PostgreSQL concurrency and trigger paths run in
+CI. Swagger docs are available at `/docs`.
 
 ## Implemented
 
@@ -83,8 +85,10 @@ paths run in CI. Swagger docs are available at `/docs`.
   partial unique index for reversals, idempotency conflict handling,
   reversal metadata validation (ADR-015)
 - V3 provider port and provider registry (ADR-016)
-- V3 Jenga and Daraja adapters (STK Push, status query, callback parsing)
-  with mocked HTTP contract tests
+- V3 Daraja adapter (STK Push, status query, callback parsing) with mocked
+  HTTP contract tests; Jenga adapter code retained but unregistered since
+  17 Sep 2026 (one-line rollback); Daraja OAuth tokens cached per consumer
+  key (~50 minutes)
 - V3 payment connection lifecycle with AES-256-GCM sealed credentials,
   chairperson authorization, validation, and audit trail (ADR-017)
 - V3 payment intent/attempt state machines with retry, timeout, and
@@ -101,6 +105,11 @@ paths run in CI. Swagger docs are available at `/docs`.
   so no new Jenga connection can be created; the Jenga adapter code and
   `JENGA` enum value are retained for a one-line rollback. Sandbox
   credential workflow documented in `.env.example`.
+- Daraja OAuth token cache (~50 min TTL, per consumer key, per environment)
+  so repeated STK Push/status-query calls skip the token round-trip
+- Optional sandbox bootstrap script `scripts/create_daraja_connection.py`
+  (stdlib-only) that reads `DARAJA_*` from env and creates/validates the
+  connection through the API
 - Production runbook (`docs/12_PRODUCTION_RUNBOOK.md`), application
   `Dockerfile`, Docker Compose app service, and runtime/dev dependency split
   with `requirements.lock.txt`
@@ -139,11 +148,18 @@ remaining V2 financial decisions (OQ-012..OQ-020).
 > state machines, webhook inbox. 17 Sep hardening: auth + general API rate
 > limits, ledger reversal idempotency, payment retryable-flag fix, JSON
 > structured logs with correlation ids, Prometheus `/metrics` endpoint,
-> production runbook, Docker Compose app service (235 tests total).
+> production runbook, Docker Compose app service. 17 Sep finalization:
+> Daraja is the only active provider (Jenga unregistered, code retained for
+> one-line rollback), Daraja OAuth token cache, `.env.example`, and a
+> stdlib-only Daraja connection bootstrap script. Tests: 211 passed + 27
+> Jenga contract tests deferred (238 total).
 
 Reports: `reports/03_V2LedgerReviewReport.md` (independent review findings),
 `reports/04_V2LedgerHardening.md` (evidence that findings were addressed),
 `reports/05_v3_payment_architecture.md` (V3 implementation evidence),
 `reports/Overall_ChamaCore_Code_Review_Report.md` (17 Sep morning review),
-and `reports/Afternoon_ChamaCore_Code_Review_Report.md` (17 Sep afternoon
-re-review whose remaining technical items are implemented above).
+`reports/Afternoon_ChamaCore_Code_Review_Report.md` (17 Sep afternoon
+re-review whose remaining technical items are implemented above), and
+`reports/ChamaCore_Finalization_Report.md` (17 Sep finalization review whose
+implementable items — docs to HEAD, Daraja OAuth cache, seed script — are
+implemented above).

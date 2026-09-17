@@ -8,6 +8,7 @@ locked down without hitting a live provider.
 import base64
 import json
 import re
+import time
 import uuid
 from decimal import Decimal
 
@@ -313,6 +314,70 @@ class TestDarajaAuthentication:
         )
         assert result.valid is False
         assert result.error_code == "AUTH_FAILED"
+
+
+class TestDarajaTokenCache:
+    @staticmethod
+    def _adapter(requests: list[httpx.Request]) -> DarajaAdapter:
+        client = injected_client(daraja_handler(requests), DARAJA_SANDBOX)
+        return DarajaAdapter(PaymentEnvironment.SANDBOX, http_client=client)
+
+    def test_oauth_token_reused_across_calls_for_same_key(self):
+        requests: list[httpx.Request] = []
+        adapter = self._adapter(requests)
+        first = adapter.validate_credentials(
+            credentials=daraja_credentials(), context=context(PaymentProviderCode.DARAJA)
+        )
+        second = adapter.validate_credentials(
+            credentials=daraja_credentials(), context=context(PaymentProviderCode.DARAJA)
+        )
+        assert first.valid is True
+        assert second.valid is True
+        assert len(requests) == 1
+
+    def test_oauth_token_refetched_after_cache_expiry(self):
+        requests: list[httpx.Request] = []
+        adapter = self._adapter(requests)
+        adapter.validate_credentials(
+            credentials=daraja_credentials(), context=context(PaymentProviderCode.DARAJA)
+        )
+        adapter._token_cache["ck-1"] = ("oauth-token", time.monotonic() - 1)
+        adapter.validate_credentials(
+            credentials=daraja_credentials(), context=context(PaymentProviderCode.DARAJA)
+        )
+        assert len(requests) == 2
+
+    def test_oauth_failure_is_not_cached(self):
+        requests: list[httpx.Request] = []
+        client = injected_client(
+            daraja_handler(
+                requests, oauth=httpx.Response(401, json={"errorMessage": "bad auth"})
+            ),
+            DARAJA_SANDBOX,
+        )
+        adapter = DarajaAdapter(PaymentEnvironment.SANDBOX, http_client=client)
+        first = adapter.validate_credentials(
+            credentials=daraja_credentials(), context=context(PaymentProviderCode.DARAJA)
+        )
+        second = adapter.validate_credentials(
+            credentials=daraja_credentials(), context=context(PaymentProviderCode.DARAJA)
+        )
+        assert first.valid is False
+        assert second.valid is False
+        assert first.error_code == "AUTH_FAILED"
+        assert len(requests) == 2
+
+    def test_distinct_consumer_keys_do_not_share_token(self):
+        requests: list[httpx.Request] = []
+        adapter = self._adapter(requests)
+        adapter.validate_credentials(
+            credentials=daraja_credentials(), context=context(PaymentProviderCode.DARAJA)
+        )
+        adapter.validate_credentials(
+            credentials=daraja_credentials(consumer_key="ck-2"),
+            context=context(PaymentProviderCode.DARAJA),
+        )
+        assert len(requests) == 2
 
 
 @pytest.mark.skip(reason="Jenga deferred; Daraja-only focus")
