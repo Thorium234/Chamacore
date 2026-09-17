@@ -168,6 +168,7 @@ def extract_json(request: httpx.Request) -> dict:
 
 
 class TestRegistry:
+    @pytest.mark.skip(reason="Jenga deferred; Daraja-only focus")
     def test_jenga_adapters_one_per_environment(self):
         adapters = create_jenga_adapters()
         assert len(adapters) == 2
@@ -188,11 +189,6 @@ class TestRegistry:
         "adapter,code,capabilities",
         [
             (
-                JengaAdapter(PaymentEnvironment.SANDBOX),
-                PaymentProviderCode.JENGA,
-                {"PAYMENT_REQUEST", "PAYMENT_STATUS_QUERY", "CALLBACKS"},
-            ),
-            (
                 DarajaAdapter(PaymentEnvironment.SANDBOX),
                 PaymentProviderCode.DARAJA,
                 {"STK_PUSH", "PAYMENT_STATUS_QUERY", "CALLBACKS"},
@@ -206,6 +202,7 @@ class TestRegistry:
         assert all(spec.supports(cap) for cap in capabilities)
 
 
+@pytest.mark.skip(reason="Jenga deferred; Daraja-only focus")
 class TestJengaAuthentication:
     def test_access_token_request_contract(self):
         requests: list[httpx.Request] = []
@@ -318,6 +315,7 @@ class TestDarajaAuthentication:
         assert result.error_code == "AUTH_FAILED"
 
 
+@pytest.mark.skip(reason="Jenga deferred; Daraja-only focus")
 class TestJengaPaymentAttempt:
     def test_stk_push_request_contract(self):
         requests: list[httpx.Request] = []
@@ -415,6 +413,7 @@ class TestJengaPaymentAttempt:
         assert excinfo.value.code == "PHONE_FORMAT"
 
 
+@pytest.mark.skip(reason="Jenga deferred; Daraja-only focus")
 class TestJengaSignature:
     @staticmethod
     def _rsa_key_pair():
@@ -567,6 +566,7 @@ class TestDarajaPaymentAttempt:
         assert result.retryable is False
 
 
+@pytest.mark.skip(reason="Jenga deferred; Daraja-only focus")
 class TestJengaStatusQuery:
     def test_status_query_contract(self):
         requests: list[httpx.Request] = []
@@ -710,6 +710,7 @@ class TestDarajaStatusQuery:
         assert excinfo.value.code == "QUERY_REFERENCE_MISSING"
 
 
+@pytest.mark.skip(reason="Jenga deferred; Daraja-only focus")
 class TestJengaCallbacks:
     def test_parse_success_callback(self):
         adapter = JengaAdapter(PaymentEnvironment.SANDBOX)

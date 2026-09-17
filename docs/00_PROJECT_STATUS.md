@@ -97,6 +97,10 @@ paths run in CI. Swagger docs are available at `/docs`.
   latency histograms, bounded route-template labels (`app/core/metrics.py`)
 - General per-IP API rate limiting beyond auth, plus the existing
   auth/payment/webhook limits (all in-process)
+- Daraja-only provider focus (17 Sep 2026): Jenga is no longer registered,
+  so no new Jenga connection can be created; the Jenga adapter code and
+  `JENGA` enum value are retained for a one-line rollback. Sandbox
+  credential workflow documented in `.env.example`.
 - Production runbook (`docs/12_PRODUCTION_RUNBOOK.md`), application
   `Dockerfile`, Docker Compose app service, and runtime/dev dependency split
   with `requirements.lock.txt`

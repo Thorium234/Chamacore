@@ -64,7 +64,8 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
   connection lifecycle (ADR-017), webhook inbox and event deduplication
   (ADR-018), AES-GCM sealed credentials, Jenga and Daraja adapter contract
   tests (MockTransport), payment intent/attempt state machines with retry
-  and timeout handling
+  and timeout handling. **Active provider: Daraja** (sandbox + production);
+  the Jenga adapter code is retained but not registered.
 - Observability: single-line JSON structured logs with `X-Request-ID`
   correlation ids echoed on responses, Prometheus `/metrics` endpoint,
   general per-IP API rate limiting beyond auth

@@ -31,11 +31,14 @@ class ProviderRegistry:
 
 
 def build_default_registry() -> ProviderRegistry:
-    """Wire every supported provider adapter (imported lazily to avoid cycles)."""
+    """Wire the supported provider adapters (Daraja only for now).
+
+    Jenga is intentionally not registered so no new Jenga connection can be
+    created, but ``app/providers/jenga/`` is retained for a one-line rollback.
+    """
     from app.providers.daraja.adapter import create_daraja_adapters
-    from app.providers.jenga.adapter import create_jenga_adapters
 
     registry = ProviderRegistry()
-    for adapter in create_jenga_adapters() + create_daraja_adapters():
+    for adapter in create_daraja_adapters():
         registry.register(adapter)
     return registry
