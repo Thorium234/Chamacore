@@ -113,9 +113,43 @@ Limits are keyed by client IP on a fixed one-minute window (per process):
 - General API: `CHAMACORE_GENERAL_API_PER_MINUTE_LIMIT` (300)
 - Auth: register 10, token 30, member-link 10 per minute
 - Payments: validate 5/min, initiate daily 5000, webhook 60/min
+- C2B callbacks: rate-limited like webhooks (per connection, per client IP)
 
 Reaching a limit returns `429` with `detail.code = "RATE_LIMITED"`. If you
 scale to multiple processes, move the limiter to a shared store first.
+
+## Daraja C2B (manual Paybill) activation
+
+C2B lets members pay a Chama's Paybill shortcode directly from their M-Pesa
+menu. Until the reference-matching rule is decided (OQ-021) it runs
+**fail-closed**:
+
+- The C2B Validation URL always answers `ResultCode = 1` (reject) and records
+  the arrival as a `REJECTED` payment event.
+- The C2B Confirmation URL acknowledges and stores the payment idempotently
+  but never writes a ledger entry.
+
+To activate for one Chama's connection (after the connection is created):
+
+```bash
+export CHAMACORE_PUBLIC_BASE_URL="https://your-domain"          # default http://localhost:8000
+export CHAMACORE_EMAIL="chair@example.com" CHAMACORE_PASSWORD="***"
+export CHAMACORE_CHAMA_ID="<chama-uuid>"
+python scripts/register_daraja_c2b_urls.py \
+  --connection-id <payment-connection-id> \
+  --response-type Completed
+```
+
+The script logs in as the chairperson and calls the authenticated
+register-URL endpoint; the server derives each connection's callback token
+(ADR-018) and points Safaricom's Validation/Confirmation URLs at
+`/api/v1/payments/c2b/validate/{connection_id}` and
+`/api/v1/payments/c2b/confirm/{connection_id}`.
+
+Verification: trigger a manual KES payment to the shortcode. Expect a
+`ResultCode: 1` rejection response and a `REJECTED` or `PROCESSED` row in
+`payment_events`; nothing on the ledger. Activation is safe to re-run; each
+connection's callback sits behind its own token.
 
 ## Operational checklist
 

@@ -21,7 +21,11 @@ from app.models.enums import (
     PaymentProviderCode,
     ProviderTransactionStatus,
 )
-from app.providers.base import ConnectionContext, PaymentAttemptRequest
+from app.providers.base import (
+    C2BRegisterRequest,
+    ConnectionContext,
+    PaymentAttemptRequest,
+)
 from app.providers.daraja.adapter import DarajaAdapter, create_daraja_adapters
 from app.providers.errors import ProviderIntegrationError, ProviderTimeoutError
 from app.providers.http import ProviderHttpClient
@@ -154,6 +158,11 @@ def daraja_handler(requests: list[httpx.Request], **responses) -> httpx.MockTran
                         },
                     },
                 ),
+            )
+        if path == "/mpesa/c2b/v1/registerurl":
+            return responses.get(
+                "register",
+                httpx.Response(200, json={"ResponseCode": "0", "ResponseDescription": "Success"}),
             )
         raise AssertionError(f"Unexpected Daraja path {path}")
 
@@ -378,6 +387,117 @@ class TestDarajaTokenCache:
             context=context(PaymentProviderCode.DARAJA),
         )
         assert len(requests) == 2
+
+
+C2B_PAYLOAD = {
+    "TransactionType": "Pay Bill",
+    "TransID": "RKTQDM7W6w",
+    "TransTime": "20191122063805",
+    "TransAmount": "100",
+    "BusinessShortCode": "600598",
+    "BillRefNumber": "353646",
+    "InvoiceNumber": "",
+    "OrgAccountBalance": "142.00",
+    "ThirdPartyTransID": "",
+    "MSISDN": "254708374149",
+    "FirstName": "John",
+    "MiddleName": "",
+    "LastName": "Doe",
+}
+
+
+class TestDarajaC2B:
+    def test_c2b_validation_payload_parsed(self):
+        adapter = DarajaAdapter(PaymentEnvironment.SANDBOX)
+        parsed = adapter.parse_c2b_validation(
+            raw_payload=json.dumps(C2B_PAYLOAD).encode()
+        )
+        assert parsed.is_parseable is True
+        assert parsed.transaction_id == "RKTQDM7W6w"
+        assert parsed.business_short_code == "600598"
+        assert parsed.amount == Decimal("100")
+        assert parsed.org_account_balance == Decimal("142.00")
+        assert parsed.bill_ref_number == "353646"
+        assert parsed.msisdn == "254708374149"
+        assert parsed.first_name == "John"
+        assert parsed.last_name == "Doe"
+
+    def test_c2b_confirmation_payload_parsed(self):
+        adapter = DarajaAdapter(PaymentEnvironment.SANDBOX)
+        parsed = adapter.parse_c2b_confirmation(
+            raw_payload=json.dumps(C2B_PAYLOAD).encode()
+        )
+        assert parsed.is_parseable is True
+        assert parsed.transaction_id == "RKTQDM7W6w"
+        assert parsed.amount == Decimal("100")
+
+    def test_c2b_missing_trans_id_not_parseable(self):
+        adapter = DarajaAdapter(PaymentEnvironment.SANDBOX)
+        payload = dict(C2B_PAYLOAD, TransID="")
+        parsed = adapter.parse_c2b_validation(
+            raw_payload=json.dumps(payload).encode()
+        )
+        assert parsed.is_parseable is False
+        assert parsed.transaction_id is None
+
+    def test_c2b_malformed_payload_not_parseable(self):
+        adapter = DarajaAdapter(PaymentEnvironment.SANDBOX)
+        assert adapter.parse_c2b_validation(raw_payload=b"not-json").is_parseable is False
+        assert adapter.parse_c2b_validation(raw_payload=b"[]").is_parseable is False
+
+    def test_c2b_register_url_request_contract(self):
+        requests: list[httpx.Request] = []
+        handler = daraja_handler(requests, register=httpx.Response(
+            200, json={"ResponseCode": "0", "ResponseDescription": "Success"}
+        ))
+        client = injected_client(handler, DARAJA_SANDBOX)
+        adapter = DarajaAdapter(PaymentEnvironment.SANDBOX, http_client=client)
+        result = adapter.register_c2b_urls(
+            credentials=daraja_credentials(),
+            request=C2BRegisterRequest(
+                short_code="174379",
+                validation_url="https://acme.example/api/v1/payments/c2b/validate/cid?token=abc",
+                confirmation_url="https://acme.example/api/v1/payments/c2b/confirm/cid?token=abc",
+                response_type="Completed",
+            ),
+            context=context(PaymentProviderCode.DARAJA),
+        )
+        assert result.accepted is True
+        assert result.response_code == "0"
+        assert [r.url.path for r in requests] == [
+            "/oauth/v1/generate",
+            "/mpesa/c2b/v1/registerurl",
+        ]
+        body = extract_json(requests[-1])
+        assert body["CommandID"] == "RegisterURL"
+        assert body["ShortCode"] == "174379"
+        assert body["ResponseType"] == "Completed"
+        assert body["ValidationURL"].startswith("https://acme.example")
+        assert body["ConfirmationURL"].startswith("https://acme.example")
+        assert requests[-1].headers["Authorization"] == "Bearer oauth-token"
+
+    def test_c2b_register_url_provider_rejection_raises(self):
+        requests: list[httpx.Request] = []
+        handler = daraja_handler(
+            requests,
+            register=httpx.Response(
+                200, json={"ResponseCode": "1", "ResponseDescription": "Bad request"}
+            ),
+        )
+        client = injected_client(handler, DARAJA_SANDBOX)
+        adapter = DarajaAdapter(PaymentEnvironment.SANDBOX, http_client=client)
+        with pytest.raises(ProviderIntegrationError) as exc:
+            adapter.register_c2b_urls(
+                credentials=daraja_credentials(),
+                request=C2BRegisterRequest(
+                    short_code="174379",
+                    validation_url="https://acme.example/v",
+                    confirmation_url="https://acme.example/c",
+                    response_type="Completed",
+                ),
+                context=context(PaymentProviderCode.DARAJA),
+            )
+        assert "C2B_REGISTER_FAILED_1" in exc.value.code
 
 
 @pytest.mark.skip(reason="Jenga deferred; Daraja-only focus")

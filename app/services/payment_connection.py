@@ -24,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.credential_cipher import CredentialCipher, CredentialCipherError
+from app.core.callback_utils import connection_callback_token
 from app.core.config import get_settings
 from app.core.errors import ConflictError, RateLimitError, StateError
 from app.core.ratelimit import RateLimiter
@@ -39,10 +40,11 @@ from app.models.payment_connection_audit import PaymentConnectionAudit
 from app.models.payment_event import PaymentEvent
 from app.models.user import User
 from app.providers import provider_registry
-from app.providers.base import ConnectionContext
-from app.providers.errors import UnknownProviderError
+from app.providers.base import C2BRegisterRequest, ConnectionContext
+from app.providers.errors import ProviderIntegrationError, UnknownProviderError
 from app.providers.schemas import ProviderCredentials
 from app.repositories.payment import PaymentConnectionRepository
+from app.schemas.payment import C2BRegisterUrlOut
 from app.services.access import (
     RoleName,
     authorize_chama_access,
@@ -51,6 +53,7 @@ from app.services.access import (
 )
 
 _validate_limiter = RateLimiter(get_settings().payment_validate_per_minute_limit, 60.0)
+_c2b_register_limiter = RateLimiter(get_settings().payment_validate_per_minute_limit, 60.0)
 
 
 class PaymentConnectionService:
@@ -283,6 +286,80 @@ class PaymentConnectionService:
         self.db.commit()
         self.db.refresh(connection)
         return connection
+
+    def register_c2b_urls(
+        self,
+        *,
+        actor: User,
+        chama_id: uuid.UUID,
+        connection_id: uuid.UUID,
+        response_type: str = "Completed",
+    ) -> C2BRegisterUrlOut:
+        """Activate Daraja C2B (manual Paybill) callbacks for a connection."""
+        chama = self._chairperson_chama(actor, chama_id)
+        connection = self.connections.get_in_chama(chama.id, connection_id)
+        if connection is None:
+            raise StateError("Payment connection not found in this Chama")
+        if connection.provider_code != PaymentProviderCode.DARAJA:
+            raise StateError("C2B Register-URL activation is only supported for Daraja")
+        if not _c2b_register_limiter.allow(str(connection.id)):
+            raise RateLimitError(
+                "Too many register-url attempts for this connection; try again shortly"
+            )
+
+        settings = get_settings()
+        base_url = settings.public_base_url.rstrip("/")
+        prefix = settings.api_v1_prefix.strip("/")
+        token = connection_callback_token(
+            connection_id=connection.id,
+            provider_code=connection.provider_code,
+            environment=connection.environment,
+        )
+        validation_url = (
+            f"{base_url}/{prefix}/payments/c2b/validate/{connection.id}?token={token}"
+        )
+        confirmation_url = (
+            f"{base_url}/{prefix}/payments/c2b/confirm/{connection.id}?token={token}"
+        )
+
+        adapter = self._adapter(connection.provider_code, connection.environment)
+        context = self._context(connection, chama.id)
+        try:
+            payload = self.cipher.open(
+                connection.encrypted_credentials,
+                chama_id=chama.id,
+                provider_code=connection.provider_code,
+                environment=connection.environment,
+                credential_version=connection.credential_version,
+                connection_id=connection.id,
+            )
+            result = adapter.register_c2b_urls(
+                credentials=payload,
+                request=C2BRegisterRequest(
+                    short_code=payload["short_code"],
+                    validation_url=validation_url,
+                    confirmation_url=confirmation_url,
+                    response_type=response_type,
+                ),
+                context=context,
+            )
+        except CredentialCipherError as exc:
+            raise StateError("Connection credentials could not be decrypted") from exc
+        except KeyError as exc:
+            raise StateError("Connection credentials are missing the short code") from exc
+        except ProviderIntegrationError as exc:
+            raise StateError(
+                f"C2B Register-URL was rejected by the provider ({exc.code}); "
+                "the shortcode still answers the old URLs"
+            ) from exc
+
+        return C2BRegisterUrlOut(
+            accepted=result.accepted,
+            response_code=result.response_code or "",
+            response_description=result.response_description or "",
+            validation_url=validation_url,
+            confirmation_url=confirmation_url,
+        )
 
     def disable(
         self, *, actor: User, chama_id: uuid.UUID, connection_id: uuid.UUID

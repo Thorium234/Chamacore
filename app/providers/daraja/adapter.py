@@ -39,6 +39,9 @@ from app.models.enums import (
     ProviderTransactionStatus,
 )
 from app.providers.base import (
+    C2BParsedPayload,
+    C2BRegisterRequest,
+    C2BRegisterResult,
     ConnectionContext,
     CredentialValidationResult,
     ParsedCallback,
@@ -64,7 +67,14 @@ FAILURE_RESULT_CODES = {
 }
 
 DARAJA_CAPABILITIES = frozenset(
-    {"STK_PUSH", "PAYMENT_STATUS_QUERY", "CALLBACKS"}
+    {
+        "STK_PUSH",
+        "PAYMENT_STATUS_QUERY",
+        "CALLBACKS",
+        "C2B_VALIDATION",
+        "C2B_CONFIRMATION",
+        "C2B_REGISTER_URL",
+    }
 )
 
 # Daraja OAuth tokens last ~1 hour. Cache per consumer key for well under
@@ -447,6 +457,101 @@ class DarajaAdapter(ProviderPort):
         # webhook service enforces attempt binding, the secret callback token,
         # HTTPS, size limits, and replay controls instead (ADR-018).
         return True, None
+
+    # -- C2B (manual Paybill money-in) --------------------------------------
+
+    def _parse_c2b(self, raw_payload: bytes) -> C2BParsedPayload:
+        from app.providers.daraja.c2b_schemas import C2BCallbackBody
+
+        try:
+            import json
+
+            payload = json.loads(raw_payload.decode("utf-8"))
+            if not isinstance(payload, dict):
+                return C2BParsedPayload(is_parseable=False)
+            body = C2BCallbackBody.model_validate(payload)
+        except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+            return C2BParsedPayload(is_parseable=False)
+
+        transaction_id = body.TransID
+        business_short_code = body.BusinessShortCode
+        if not transaction_id or not business_short_code:
+            return C2BParsedPayload(is_parseable=False)
+
+        amount = self._c2b_amount(body.TransAmount)
+        balance = self._c2b_amount(body.OrgAccountBalance)
+        return C2BParsedPayload(
+            is_parseable=True,
+            transaction_type=body.TransactionType,
+            transaction_id=transaction_id,
+            transaction_time=body.TransTime,
+            amount=amount,
+            business_short_code=business_short_code,
+            bill_ref_number=body.BillRefNumber,
+            invoice_number=body.InvoiceNumber,
+            org_account_balance=balance,
+            third_party_trans_id=body.ThirdPartyTransID,
+            msisdn=body.MSISDN,
+            first_name=body.FirstName,
+            middle_name=body.MiddleName,
+            last_name=body.LastName,
+        )
+
+    @staticmethod
+    def _c2b_amount(raw: str | None) -> Decimal | None:
+        if raw is None or raw == "":
+            return None
+        try:
+            return Decimal(str(raw))
+        except InvalidOperation:
+            return None
+
+    def parse_c2b_validation(self, *, raw_payload: bytes) -> C2BParsedPayload:
+        return self._parse_c2b(raw_payload)
+
+    def parse_c2b_confirmation(self, *, raw_payload: bytes) -> C2BParsedPayload:
+        return self._parse_c2b(raw_payload)
+
+    def register_c2b_urls(
+        self,
+        *,
+        credentials: dict,
+        request: C2BRegisterRequest,
+        context: ConnectionContext,
+    ) -> C2BRegisterResult:
+        shaped = self.decrypted_credentials(credentials, context)
+        token = self._access_token(shaped["consumer_key"], shaped["consumer_secret"])
+        body = {
+            "ShortCode": str(request.short_code),
+            "ResponseType": request.response_type,
+            "ConfirmationURL": request.confirmation_url,
+            "ValidationURL": request.validation_url,
+            "CommandID": "RegisterURL",
+        }
+        response = self._http.request(
+            "POST",
+            "/mpesa/c2b/v1/registerurl",
+            headers={"Authorization": f"Bearer {token}"},
+            json=body,
+        )
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ProviderIntegrationError(
+                "C2B_REGISTER_MALFORMED", "Daraja Register URL response was not JSON"
+            ) from exc
+        response_code = str(payload.get("ResponseCode", ""))
+        description = payload.get("ResponseDescription")
+        if response_code != "0":
+            raise ProviderIntegrationError(
+                f"C2B_REGISTER_FAILED_{response_code or 'UNKNOWN'}",
+                self._safe_message(str(description or "Daraja rejected Register URL")),
+            )
+        return C2BRegisterResult(
+            accepted=True,
+            response_code=response_code,
+            response_description=str(description) if description else None,
+        )
 
     def normalize_provider_status(self, raw: str) -> ProviderTransactionStatus:
         code = str(raw).strip()

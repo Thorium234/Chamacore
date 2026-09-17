@@ -46,6 +46,14 @@ boundary with the Daraja adapter (Jenga code retained but unregistered since
 with a chairperson-controlled lifecycle, payment intent/attempt state
 machines, and a deduplicated, append-only webhook inbox.
 
+C2B (manual Paybill money-in) plumbing per the 17 Sep M-Pesa validation
+report: strict callback schemas, `/payments/c2b/validate|confirm/{connection_id}`
+endpoints bound by per-connection token with `TransID` idempotency, a
+chairperson-only Register-URL activation endpoint, and fail-closed behaviour —
+every validation is rejected (`ResultCode 1`) and confirmations never touch
+the ledger until the BillRefNumber rule is approved (OQ-021; gated by
+OQ-012/OQ-013).
+
 Loans, repayments, and payouts are blocked by open questions
 (OQ-015..OQ-020), as is contribution-to-ledger posting (OQ-012/OQ-013).
 
@@ -57,7 +65,7 @@ uvicorn app.main:app --reload
 pytest
 ```
 
-Of 238 tests, 211 pass on SQLite and 27 Jenga adapter contract tests are
+Of 259 tests, 232 pass on SQLite and 27 Jenga adapter contract tests are
 deferred (skipped); native PostgreSQL concurrency and trigger paths run in
 CI. Swagger docs are available at `/docs`.
 
@@ -95,6 +103,15 @@ CI. Swagger docs are available at `/docs`.
   idempotency handling
 - V3 webhook inbox with database-backed deduplication and disagreement
   detection (ADR-018)
+- C2B (manual Paybill) plumbing (report 17 Sep 2026): strict `C2BCallbackBody`
+  schema, `POST /payments/c2b/validate/{connection_id}` and
+  `POST /payments/c2b/confirm/{connection_id}` endpoints (token-bound,
+  `TransID`-prefixed event ids, payload-hash deduplication/disagreement),
+  Database-backed receipt storage in the webhook inbox, and a
+  chairperson-only `register-c2b-urls` activation endpoint that points
+  Safaricom at the connections' Validation/Confirmation URLs. Validation is
+  fail-closed (`ResultCode 1`); confirmation is acknowledged and stored but
+  posts nothing to the ledger (OQ-021/OQ-012/OQ-013).
 - Structured logging: single-line JSON with `X-Request-ID` correlation ids
   echoed on request/response (middleware + `app/core/logging.py`)
 - Prometheus-exposition `/metrics` endpoint with HTTP request counters and
@@ -110,6 +127,9 @@ CI. Swagger docs are available at `/docs`.
 - Optional sandbox bootstrap script `scripts/create_daraja_connection.py`
   (stdlib-only) that reads `DARAJA_*` from env and creates/validates the
   connection through the API
+- One-time C2B activation script `scripts/register_daraja_c2b_urls.py`
+  (stdlib-only API client; chairperson login) that calls the connection's
+  register-URL endpoint so the server binds the C2B callbacks
 - Production runbook (`docs/12_PRODUCTION_RUNBOOK.md`), application
   `Dockerfile`, Docker Compose app service, and runtime/dev dependency split
   with `requirements.lock.txt`
@@ -117,7 +137,8 @@ CI. Swagger docs are available at `/docs`.
   contributions, membership-number concurrency, identity-claim uniqueness,
   constraint backstop, JWT config, health, ledger posting/idempotency/
   reversal/authorization/db-enforcement/concurrency, credential cipher,
-  payment connections, payment intents, payment webhooks, provider adapters)
+  payment connections, payment intents, payment webhooks, provider adapters,
+  C2B callbacks and register-URL activation)
 - PostgreSQL test target (Docker Compose + CI workflow)
 - Approved decisions recorded in ADRs and `docs/decisions/`
 
@@ -125,6 +146,9 @@ CI. Swagger docs are available at `/docs`.
 
 - Loans, loan repayments, payouts (blocked by OQ-015..OQ-020)
 - Connecting confirmed contributions to the ledger (blocked by OQ-012/OQ-013)
+- C2B validation acceptance and C2B confirmation-to-ledger credit (blocked by
+  OQ-021, gated by OQ-012/OQ-013) — callbacks are received, stored, and
+  acknowledged, but no money is credited
 - Registration-fee payments on the ledger (blocked by OQ-014)
 - Live Jenga/Daraja sandbox integration tests (requires live test accounts)
 - Frontend
@@ -150,9 +174,11 @@ remaining V2 financial decisions (OQ-012..OQ-020).
 > structured logs with correlation ids, Prometheus `/metrics` endpoint,
 > production runbook, Docker Compose app service. 17 Sep finalization:
 > Daraja is the only active provider (Jenga unregistered, code retained for
-> one-line rollback), Daraja OAuth token cache, `.env.example`, and a
-> stdlib-only Daraja connection bootstrap script. Tests: 211 passed + 27
-> Jenga contract tests deferred (238 total).
+> one-line rollback), Daraja OAuth token cache, `.env.example`, a
+> stdlib-only Daraja connection bootstrap script, and C2B manual-Paybill
+> plumbing (fail-closed validation + idempotent confirmation storage,
+> register-URL activation). Tests: 232 passed + 27 Jenga contract tests
+> deferred (259 total).
 
 Reports: `reports/03_V2LedgerReviewReport.md` (independent review findings),
 `reports/04_V2LedgerHardening.md` (evidence that findings were addressed),

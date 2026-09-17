@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from app.api.deps import check_general_rate_limit
 from app.api.v1 import (
     auth,
+    c2b,
     chamas,
     contributions,
     ledger,
@@ -27,3 +28,4 @@ api_router.include_router(shares.router)
 api_router.include_router(ledger.router)
 api_router.include_router(payments.router)
 api_router.include_router(payments_webhooks.router)
+api_router.include_router(c2b.router)

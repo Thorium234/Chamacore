@@ -8,6 +8,7 @@ identifiers, timestamps, and validation state.
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -114,3 +115,34 @@ class PaymentEventOut(BaseModel):
     status: PaymentEventStatus
     received_at: datetime
     processed_at: datetime | None
+
+
+class C2BValidationResponse(BaseModel):
+    """Safaricom C2B Validation envelope (``ResultCode`` 0 = accept)."""
+
+    ResultCode: int
+    ResultDesc: str
+
+
+class C2BConfirmationResponse(BaseModel):
+    """Safaricom C2B Confirmation acknowledgement (any body is ignored)."""
+
+    ok: bool
+    event_id: uuid.UUID
+    event_status: PaymentEventStatus
+
+
+class C2BRegisterUrlRequest(BaseModel):
+    """Body for activating the Daraja C2B Register-URL step."""
+
+    response_type: Literal["Completed", "Cancelled"] = "Completed"
+
+
+class C2BRegisterUrlOut(BaseModel):
+    """Result of registering C2B Validation/Confirmation URLs with Daraja."""
+
+    accepted: bool
+    response_code: str
+    response_description: str
+    validation_url: str
+    confirmation_url: str

@@ -9,6 +9,8 @@ from app.models.enums import (
     ProviderTransactionStatus,
 )
 from app.providers.base import (
+    C2BParsedPayload,
+    C2BRegisterResult,
     ConnectionContext,
     CredentialValidationResult,
     ParsedCallback,
@@ -17,9 +19,18 @@ from app.providers.base import (
     ProviderSpec,
     StatusQueryResult,
 )
+from app.providers.errors import ProviderIntegrationError
 
 FAKE_CAPABILITIES = frozenset(
-    {"PAYMENT_REQUEST", "STK_PUSH", "PAYMENT_STATUS_QUERY", "CALLBACKS"}
+    {
+        "PAYMENT_REQUEST",
+        "STK_PUSH",
+        "PAYMENT_STATUS_QUERY",
+        "CALLBACKS",
+        "C2B_VALIDATION",
+        "C2B_CONFIRMATION",
+        "C2B_REGISTER_URL",
+    }
 )
 
 
@@ -41,6 +52,48 @@ class FakeAdapter(ProviderPort):
         self.query_results: dict[str, StatusQueryResult] = {}
         self.verify_result: tuple[bool, str | None] = (True, None)
         self.parse_callback_fn = None
+        self.register_c2b_error: ProviderIntegrationError | None = None
+        self.last_register_request = None
+
+    def register_c2b_urls(
+        self, *, credentials: dict, request, context: ConnectionContext
+    ) -> C2BRegisterResult:
+        if self.register_c2b_error is not None:
+            raise self.register_c2b_error
+        self.last_register_request = request
+        return C2BRegisterResult(
+            accepted=True,
+            response_code="0",
+            response_description="Success",
+        )
+
+    def parse_c2b_validation(self, *, raw_payload: bytes) -> C2BParsedPayload:
+        return self._parse_c2b(raw_payload)
+
+    def parse_c2b_confirmation(self, *, raw_payload: bytes) -> C2BParsedPayload:
+        return self._parse_c2b(raw_payload)
+
+    @staticmethod
+    def _parse_c2b(raw_payload: bytes) -> C2BParsedPayload:
+        try:
+            parsed = json.loads(raw_payload.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return C2BParsedPayload()
+        if not isinstance(parsed, dict):
+            return C2BParsedPayload()
+        trans_id = parsed.get("TransID")
+        if not trans_id:
+            return C2BParsedPayload()
+        return C2BParsedPayload(
+            transaction_id=str(trans_id),
+            business_short_code=str(parsed.get("BusinessShortCode") or ""),
+            amount=Decimal(str(parsed["TransAmount"])) if parsed.get("TransAmount") else None,
+            bill_ref_number=str(parsed.get("BillRefNumber") or ""),
+            msisdn=str(parsed.get("MSISDN") or ""),
+            first_name=str(parsed.get("FirstName") or ""),
+            middle_name=str(parsed.get("MiddleName") or ""),
+            last_name=str(parsed.get("LastName") or ""),
+        )
 
     @property
     def spec(self) -> ProviderSpec:

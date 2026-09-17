@@ -103,6 +103,43 @@ class ParsedCallback:
         return self.provider_event_id is not None and self.normalized_status is not None
 
 
+@dataclass(frozen=True)
+class C2BParsedPayload:
+    """Normalized C2B validation/confirmation payload (manual Paybill money-in)."""
+
+    is_parseable: bool
+    transaction_type: str | None = None
+    transaction_id: str | None = None
+    transaction_time: str | None = None
+    amount: Decimal | None = None
+    business_short_code: str | None = None
+    bill_ref_number: str | None = None
+    invoice_number: str | None = None
+    org_account_balance: Decimal | None = None
+    third_party_trans_id: str | None = None
+    msisdn: str | None = None
+    first_name: str | None = None
+    middle_name: str | None = None
+    last_name: str | None = None
+
+
+@dataclass(frozen=True)
+class C2BRegisterRequest:
+    """One-time operator request to bind validation/confirmation URLs (Register URL)."""
+
+    short_code: str
+    validation_url: str
+    confirmation_url: str
+    response_type: str
+
+
+@dataclass(frozen=True)
+class C2BRegisterResult:
+    accepted: bool
+    response_code: str | None = None
+    response_description: str | None = None
+
+
 class ProviderPort(ABC):
     """The one interface the payment service depends on.
 
@@ -183,3 +220,27 @@ class ProviderPort(ABC):
         Implementations must reject unknown keys and missing required keys so
         no garbage payload ever reaches a provider.
         """
+
+    # -- C2B (manual Paybill money-in) ---------------------------------------
+    #
+    # Default implementations are inert so adapters that do not support C2B
+    # (registry-gated via ``ProviderSpec.capabilities``) fail closed without
+    # inventing behaviour.
+
+    def parse_c2b_validation(self, *, raw_payload: bytes) -> C2BParsedPayload:
+        """Normalize a raw C2B Validation payload from the provider."""
+        return C2BParsedPayload(is_parseable=False)
+
+    def parse_c2b_confirmation(self, *, raw_payload: bytes) -> C2BParsedPayload:
+        """Normalize a raw C2B Confirmation payload from the provider."""
+        return C2BParsedPayload(is_parseable=False)
+
+    def register_c2b_urls(
+        self,
+        *,
+        credentials: dict,
+        request: C2BRegisterRequest,
+        context: ConnectionContext,
+    ) -> C2BRegisterResult:
+        """Bind the provider-side validation/confirmation URLs (one-time step)."""
+        raise NotImplementedError(f"{self.name} does not support C2B Register URL")

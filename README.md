@@ -24,7 +24,7 @@ pagination, idempotency conflict handling) are delivered. V3 (Payment
 Architecture) is implemented: provider-port boundary, Daraja adapter (Jenga
 code retained but not registered — Daraja is the only active provider), sealed
 payment connection lifecycle, payment intent/attempt state machines, and a
-deduplicated webhook inbox. Of 238 automated tests, 211 pass and 27 Jenga
+deduplicated webhook inbox. Of 259 automated tests, 232 pass and 27 Jenga
 adapter contract tests are deferred (skipped); native PostgreSQL concurrency
 and trigger paths are additionally run in CI.
 
@@ -68,7 +68,16 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
   and timeout handling. **Active provider: Daraja** (sandbox + production);
   the Jenga adapter code is retained but not registered. Daraja OAuth tokens
   are cached per consumer key (~50 minutes). Sandbox bootstrapping via
-  `scripts/create_daraja_connection.py`.
+  `scripts/create_daraja_connection.py`; one-time C2B activation via
+  `scripts/register_daraja_c2b_urls.py`.
+- C2B (manual Paybill money-in) plumbing (report 2026-09-17): strict callback
+  schemas, `/payments/c2b/validate/{connection_id}` and
+  `/payments/c2b/confirm/{connection_id}` endpoints with token binding,
+  `TransID`-based idempotency and duplicate/disagreement detection, and a
+  chairperson-only register-URL activation endpoint. Validation is
+  **fail-closed** (`ResultCode 1`) and confirmation never writes the ledger:
+  both wait on the `BillRefNumber`-to-Chama/member rule (OQ-021, gated by
+  OQ-012/OQ-013).
 - Observability: single-line JSON structured logs with `X-Request-ID`
   correlation ids echoed on responses, Prometheus `/metrics` endpoint,
   general per-IP API rate limiting beyond auth

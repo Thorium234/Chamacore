@@ -15,6 +15,8 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.payment import (
+    C2BRegisterUrlOut,
+    C2BRegisterUrlRequest,
     PaymentAttemptOut,
     PaymentConnectionCreate,
     PaymentConnectionOut,
@@ -122,6 +124,25 @@ def disable_payment_connection(
 ):
     return PaymentConnectionService(db).disable(
         actor=actor, chama_id=chama_id, connection_id=connection_id
+    )
+
+
+@router.post(
+    "/chamas/{chama_id}/payment-connections/{connection_id}/register-c2b-urls",
+    response_model=C2BRegisterUrlOut,
+)
+def register_c2b_urls(
+    payload: C2BRegisterUrlRequest,
+    chama_id: uuid.UUID,
+    connection_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    return PaymentConnectionService(db).register_c2b_urls(
+        actor=actor,
+        chama_id=chama_id,
+        connection_id=connection_id,
+        response_type=payload.response_type,
     )
 
 

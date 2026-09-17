@@ -257,6 +257,108 @@ Posting rules: there is no public endpoint that writes to the ledger. Ledger
 entries are created only by the trusted posting service when an approved
 business event is posted (ADR-012).
 
+## Payments callbacks (V3)
+
+Provider callbacks arrive unauthenticated and are bound to a Chama's payment
+connection with the per-connection callback token (`?token=<...>`, derived
+from `connection_callback_token`, ADR-018). There is currently a single active
+provider, Daraja (sandbox and production).
+
+### `POST /api/v1/payments/c2b/validate/{connection_id}`
+
+Status: `IMPLEMENTED` (fail-closed)
+
+Daraja C2B (manual Paybill) Validation URL for the Daraja Register-URL
+activation step. Safaricom calls this before completing a payment.
+
+**Query parameters:** `token` (required) — per-connection callback token.
+
+**Request:** raw JSON, strict schema (`C2BCallbackBody`), `TransactionType`,
+`TransID`, `TransTime`, `TransAmount`, `BusinessShortCode`, `BillRefNumber`,
+`MSISDN`, and payer names are captured; a `TransID` is required, otherwise the
+request is unprocessable.
+
+**Response (`C2BValidationResponse`), always HTTP 200:**
+```json
+{ "ResultCode": 1, "ResultDesc": "Rejected (OQ-021): ..." }
+```
+
+Accept logic does not exist yet: every validation is rejected with
+`ResultCode = 1` until a reference-matching rule is approved (OQ-021). The
+rejection is recorded as a `REJECTED` `payment_event` (identity
+`C2B_VALIDATION:<TransID>`) so every arrival is auditable. Unknown
+connections/tokens are also answered `ResultCode = 1` (never a 404/500).
+
+### `POST /api/v1/payments/c2b/confirm/{connection_id}`
+
+Status: `IMPLEMENTED` (acknowledges, stores, never posts to the ledger)
+
+Daraja C2B (manual Paybill) Confirmation URL. Called by Safaricom after a
+payment completes (only relevant once the Validation URL accepts).
+
+**Query parameters:** `token` (required).
+
+**Request:** same strict schema as validation.
+
+**Response (`C2BConfirmationResponse`):**
+```json
+{ "ok": true, "event_status": "PROCESSED" }
+```
+
+- The raw payload and its SHA-256 hash are stored in `payment_events`
+  (identity `C2B_CONFIRMATION:<TransID>`).
+- Idempotent: a duplicate delivery of the same `TransID` + identical payload
+  returns `DEDUPLICATED`; the same `TransID` with a different payload returns
+  `DISAGREEMENT`.
+- `BusinessShortCode` is compared to the connection's stored short code; a
+  mismatch is recorded and acknowledged as `UNPROCESSABLE` (the payment is
+  not ours to settle).
+- No ledger entry is written (`OQ-012/OQ-013`, `OQ-021`). Crediting the money
+  still requires an approved decision on the BillRefNumber-to-Chama/member
+  rule before confirmation can drive the ledger.
+- Invalid/unknown tokens return `400 WEBHOOK_REJECTED`.
+
+### `POST /api/v1/payments/webhooks/{provider_code}/{environment}`
+
+Status: `IMPLEMENTED` (ADR-018)
+
+Async callback inbox for intent-bound callbacks (e.g. STK Push callbacks).
+Uses the seven-step pipeline: size check, connection resolution, verification,
+event identity, deduplication, raw storage, state transition.
+
+### `POST /api/v1/chamas/{chama_id}/payment-connections/{connection_id}/register-c2b-urls`
+
+Status: `IMPLEMENTED`
+
+Chairperson-only. Asks Daraja to bind the connection's shortcode to this
+app's C2B Validation/Confirmation URLs (the "Register URL" step of the C2B
+API). Runs server-side, so the operator never handles the credential
+encryption key; `scripts/register_daraja_c2b_urls.py` drives it with a
+chairperson login.
+
+**Request (`C2BRegisterUrlRequest`):**
+```json
+{ "response_type": "Completed" }
+```
+`response_type` is `Completed` (default) or `Cancelled`.
+
+**Response (`C2BRegisterUrlOut`):**
+```json
+{
+  "accepted": true,
+  "response_code": "0",
+  "response_description": "Success",
+  "validation_url": "https://<public>/api/v1/payments/c2b/validate/<connection_id>?token=...",
+  "confirmation_url": "https://<public>/api/v1/payments/c2b/confirm/<connection_id>?token=..."
+}
+```
+
+The URLs are derived from `CHAMACORE_PUBLIC_BASE_URL` + `CHAMACORE_API_V1_PREFIX`
+and carry that connection's callback token. Safaricom requires the URLs to be
+public and HTTPS in production. A provider rejection is surfaced as
+`400 INVALID_STATE` with the provider's error code in the message. Returns
+`403` for non-chairpersons.
+
 ## API rules
 
 - Use versioned URLs.

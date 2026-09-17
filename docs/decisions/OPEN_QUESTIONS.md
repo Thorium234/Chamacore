@@ -160,6 +160,30 @@ ever reversible?
 
 **Blocked work.** Payout API and ledger posting.
 
+### OQ-021: C2B (Paybill) payment intake
+
+**Question.** `reports/Mpesa_Integration_Validation_Report.md` (approved
+`2026-09-17`) asks for the C2B API: a Validation URL, a Confirmation URL, and
+a Register-URL activation step. For manual M-Pesa Paybill payments, how is a
+payment matched to a Chama and member?
+
+- What does `BillRefNumber` encode, and how is it looked up (e.g. the
+  server-side membership number)? May one shortcode serve several Chamas, or
+  is every Chama's connection its own shortcode?
+- Which approval check runs at validation (must the member be ACTIVE? must
+  the Chama have an ACTIVE connection?)?
+
+**Blocked work.** C2B validation accept/reject logic, C2B confirmation
+processing, and the matching of a manual payment to a member. The
+confirmation's ledger credit also still depends on OQ-012/OQ-013 (posting
+accounts). The same blocker applies to the report's STK-callback step
+("settle the member contribution record"): callbacks currently only advance
+the payment attempt/intent state machines and never touch contribution/ledger
+records (ADR-018).
+
+**Why it is open.** No approved rule describes the payment-reference format,
+the member lookup, or the posting path.
+
 ## Guiding rule (AGENTS.md)
 
 If a decision is missing:
