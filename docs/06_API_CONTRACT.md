@@ -12,7 +12,8 @@
 
 Status: `IMPLEMENTED`
 
-Returns `{"message": "Hello World"}`. Will become a health endpoint later.
+Returns a landing payload with the service name, version, and API docs
+path: `{"service": "ChamaCore", "version": "1.0.0", "docs": "/docs"}`.
 
 ## Health and Readiness
 

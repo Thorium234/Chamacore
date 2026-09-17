@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import (
+    check_member_link_rate_limit,
+    check_register_rate_limit,
+    check_token_rate_limit,
+    get_current_user,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import MemberLinkRequest, RegisterRequest, TokenOut, UserOut
@@ -14,7 +19,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def register(data: RegisterRequest, db: Session = Depends(get_db)) -> User:
+def register(
+    data: RegisterRequest,
+    db: Session = Depends(get_db),
+    _rate_limit: None = Depends(check_register_rate_limit),
+) -> User:
     return AuthService(db).register(email=data.email, password=data.password)
 
 
@@ -22,6 +31,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)) -> User:
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
+    _rate_limit: None = Depends(check_token_rate_limit),
 ) -> TokenOut:
     service = AuthService(db)
     user = service.authenticate(email=form_data.username, password=form_data.password)
@@ -39,6 +49,7 @@ def link_me_to_member(
     data: MemberLinkRequest,
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
+    _rate_limit: None = Depends(check_member_link_rate_limit),
 ) -> User:
     return AuthService(db).link_member(
         user=actor, phone_number=data.phone_number, government_id=data.government_id

@@ -34,6 +34,11 @@ class RateLimiter:
             self._prune(now)
             return True
 
+    def reset(self) -> None:
+        """Clear all recorded windows so a fresh test case starts unthrottled."""
+        with self._lock:
+            self._counts.clear()
+
     def retry_after_seconds(self, key: str) -> int:
         now = time.monotonic()
         with self._lock:

@@ -128,3 +128,31 @@ class TestMemberLink:
             json={"phone_number": "+254700000001", "government_id": "GID-001"},
         )
         assert r.status_code == 401
+
+
+class TestRateLimit:
+    def test_register_rate_limited(self, client):
+        for i in range(10):
+            r = client.post(
+                "/api/v1/auth/register",
+                json={"email": f"rl{i}@example.com", "password": "securepass123"},
+            )
+            assert r.status_code == 201
+        r = client.post(
+            "/api/v1/auth/register",
+            json={"email": "overflow@example.com", "password": "securepass123"},
+        )
+        assert r.status_code == 429
+
+    def test_token_rate_limited(self, client):
+        for i in range(30):
+            r = client.post(
+                "/api/v1/auth/token",
+                data={"username": "ghost@example.com", "password": "wrongpassword"},
+            )
+            assert r.status_code == 401
+        r = client.post(
+            "/api/v1/auth/token",
+            data={"username": "ghost@example.com", "password": "wrongpassword"},
+        )
+        assert r.status_code == 429

@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     # the local uvicorn server.
     public_base_url: str = "http://localhost:8000"
 
+    # General API rate limits for unauthenticated auth endpoints (report 2.4).
+    auth_register_per_minute_limit: int = 10
+    auth_token_per_minute_limit: int = 30
+    auth_member_link_per_minute_limit: int = 10
+
     # Webhook safety and provider behaviour limits (ADR-018).
     payment_webhook_max_body_bytes: int = 262144
     payment_event_raw_retention_days: int = 90

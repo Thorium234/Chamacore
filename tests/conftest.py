@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-from app.api.deps import oauth2_scheme
+from app.api.deps import oauth2_scheme, reset_auth_rate_limiters
 from app.db.base import Base
 from app.db.ledger_guards import create_ledger_guards
 from app.db.session import get_db
@@ -28,6 +28,13 @@ def _seed_roles(session):
         if role.value not in existing:
             session.add(Role(name=role.value))
     session.commit()
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_rate_limits():
+    """Give every test a clean auth rate-limit budget."""
+    reset_auth_rate_limiters()
+    yield
 
 
 TEST_DATABASE_URL = os.environ.get("CHAMACORE_DATABASE_URL")

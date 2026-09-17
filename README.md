@@ -31,7 +31,7 @@ paths are additionally run in CI.
 
 ```bash
 python -m venv env
-env\Scripts\activate        # Windows (PowerShell); on macOS/Linux: source env/bin/activate
+source env/bin/activate     # macOS/Linux; on Windows (PowerShell): env\Scripts\activate
 pip install -r requirements.txt
 alembic upgrade head
 uvicorn app.main:app --reload

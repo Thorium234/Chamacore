@@ -28,7 +28,7 @@ app.include_router(api_router, prefix=settings.api_v1_prefix)
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"message": "Hello World"}
+    return {"service": settings.app_name, "version": app.version, "docs": "/docs"}
 
 
 @app.get("/health")

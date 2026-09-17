@@ -2,11 +2,13 @@
 
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.errors import RateLimitError
+from app.core.ratelimit import RateLimiter
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
@@ -21,6 +23,35 @@ INVALID_CREDENTIALS = HTTPException(
     detail="Could not validate credentials",
     headers={"WWW-Authenticate": "Bearer"},
 )
+
+_register_limiter = RateLimiter(get_settings().auth_register_per_minute_limit, 60.0)
+_token_limiter = RateLimiter(get_settings().auth_token_per_minute_limit, 60.0)
+_member_link_limiter = RateLimiter(get_settings().auth_member_link_per_minute_limit, 60.0)
+
+
+def reset_auth_rate_limiters() -> None:
+    """Clear auth limiter windows between test cases."""
+    for limiter in (_register_limiter, _token_limiter, _member_link_limiter):
+        limiter.reset()
+
+
+def _client_host_key(request: Request) -> str:
+    return request.client.host if request.client is not None else "unknown"
+
+
+def check_register_rate_limit(request: Request) -> None:
+    if not _register_limiter.allow(_client_host_key(request)):
+        raise RateLimitError("Too many registration requests; try again shortly")
+
+
+def check_token_rate_limit(request: Request) -> None:
+    if not _token_limiter.allow(_client_host_key(request)):
+        raise RateLimitError("Too many login attempts; try again shortly")
+
+
+def check_member_link_rate_limit(request: Request) -> None:
+    if not _member_link_limiter.allow(_client_host_key(request)):
+        raise RateLimitError("Too many member-link requests; try again shortly")
 
 
 def get_current_user(
