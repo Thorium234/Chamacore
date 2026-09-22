@@ -25,6 +25,9 @@ All `CHAMACORE_` variables are read from the environment or `.env`
 | `CHAMACORE_DEBUG` | `false` | Disables dev-only secrets and enable dev credential master key |
 | `CHAMACORE_DATABASE_URL` | yes | SQLAlchemy/PostgreSQL URL e.g. `postgresql+psycopg://user:pass@host:5432/db` |
 | `CHAMACORE_JWT_SECRET_KEY` | yes | Strong random secret for access tokens |
+| `CHAMACORE_JWT_EXPIRES_MINUTES` | no | Access-token lifetime in minutes (default `120`) |
+| `CHAMACORE_REFRESH_TOKEN_EXPIRES_DAYS` | no | Refresh-token lifetime in days (default `30`) |
+| `CHAMACORE_METRICS_TOKEN` | recommended | Shared secret for `GET /metrics` in production (see Monitoring) |
 | `CHAMACORE_CREDENTIAL_ENCRYPTION_KEY` | yes | Base64-encoded 32-byte AES key for provider credentials |
 | `CHAMACORE_CREDENTIAL_ENCRYPTION_KEY_VERSION` | no | Rotates the active key (default `1`) |
 | `CHAMACORE_CREDENTIAL_ENCRYPTION_KEYS` | no | JSON map of older key versions for rotation |
@@ -40,7 +43,24 @@ All `CHAMACORE_` variables are read from the environment or `.env`
 
 Fail-closed behaviour: with `CHAMACORE_DEBUG=false`, the app **refuses to
 start** if the JWT secret is the development default or the credential
-encryption key is missing/development-only.
+encryption key is missing/development-only. The password hashing scheme and
+membership-identity claim rules are fixed and are not configurable.
+
+## Authentication and session flow
+
+- Access tokens are JWT and **short-lived by default (120 minutes)** so a
+  stolen token has a small blast radius (production-readiness brief 3.1).
+- Login (`POST /api/v1/auth/token`) returns `access_token`, `refresh_token`,
+  `token_type`, and `expires_in`. The refresh token is opaque, stored only as
+  a SHA-256 digest, and is **single-use**: exchanging it at
+  `POST /api/v1/auth/refresh` rotates it (the presented token is revoked and a
+  successor issued), so replaying a used token fails with `401`.
+- `POST /api/v1/auth/logout` revokes the presented refresh token (idempotent).
+- Clients should refresh before the access token expires and treat a `401`
+  from `/refresh` as session-expired (re-login). Never lengthen the access
+  TTL to avoid building refresh handling; prefer the refresh flow.
+- The system posting account (`system@chamacore.invalid`) is a non-login
+  account; `POST /api/v1/auth/token` always rejects it.
 
 ## Secrets
 
@@ -92,10 +112,25 @@ strategy for the ledger.
 | `GET /health` | Liveness; no database check |
 | `GET /ready` | Readiness; verifies database connectivity |
 | `GET /metrics` | Prometheus text exposition of HTTP request counters and latency |
-| `/docs` | OpenAPI/Swagger |
+| `/docs`, `/redoc`, `/openapi.json` | API docs — **debug builds only**; absent in production |
 
-Scrape `http://<host>:8000/metrics` in application header namespaces
-(`chamacore_http_requests_total`, `chamacore_http_request_duration_seconds_*`).
+Docs exposure: interactive API docs and the raw OpenAPI schema are only wired
+in debug builds (`CHAMACORE_DEBUG=true`); in production these routes return
+`404` (production-readiness brief 3.2).
+
+Metrics protection: in production (`CHAMACORE_DEBUG=false`) `/metrics` answers
+only requests carrying the `X-Metrics-Token` header whose value matches
+`CHAMACORE_METRICS_TOKEN`. If the token is unset, the endpoint returns `404`
+so the scrape path is never public. Configure Prometheus scraping to send the
+header:
+
+```bash
+wget -q -O- --header="X-Metrics-Token: $CHAMACORE_METRICS_TOKEN" \
+  http://127.0.0.1:8000/metrics
+```
+
+Scrape in application header namespaces (`chamacore_http_requests_total`,
+`chamacore_http_request_duration_seconds_*`).
 
 ## Logging and correlation
 
@@ -122,13 +157,23 @@ scale to multiple processes, move the limiter to a shared store first.
 ## Daraja C2B (manual Paybill) activation
 
 C2B lets members pay a Chama's Paybill shortcode directly from their M-Pesa
-menu. Until the reference-matching rule is decided (OQ-021) it runs
-**fail-closed**:
+menu. Behaviour is defined by **ADR-019** (OQ-021 resolved 2026-09-22):
 
-- The C2B Validation URL always answers `ResultCode = 1` (reject) and records
-  the arrival as a `REJECTED` payment event.
-- The C2B Confirmation URL acknowledges and stores the payment idempotently
-  but never writes a ledger entry.
+- The C2B Validation URL answers `ResultCode = 0` (accept) only when the
+  BillRefNumber matches an active membership number on an active connection;
+  everything else answers `ResultCode = 1` (reject). Every arrival is stored
+  as a payment event with its decided status.
+- The C2B Confirmation URL stores the payment idempotently by `TransID`,
+  validates the same rules, then settles: it records a **confirmed
+  contribution** for the membership number's current `YYYY-MM` period and
+  posts the ledger entry (Cash debit / Share Capital credit) as the
+  **system user** (`system@chamacore.invalid`, ADR-014). Duplicate deliveries
+  and re-deliveries of an already-confirmed contribution are deduplicated —
+  one contribution and one ledger posting per `TransID`.
+- Incoming **STK push callbacks** follow the same settlement rules: a
+  `SUCCEEDED` intent that is not linked to a contribution is a documented
+  **no-op** (a system-user posting requires a settled contribution object); an
+  intent linked to an already-confirmed contribution is an idempotent retry.
 
 To activate for one Chama's connection (after the connection is created):
 
@@ -148,16 +193,28 @@ register-URL endpoint; the server derives each connection's callback token
 `/api/v1/payments/c2b/confirm/{connection_id}`.
 
 Verification: trigger a manual KES payment to the shortcode. Expect a
-`ResultCode: 1` rejection response and a `REJECTED` or `PROCESSED` row in
-`payment_events`; nothing on the ledger. Activation is safe to re-run; each
+`ResultCode: 0` acceptance for a valid active membership and a
+`PROCESSED` payment event plus one contribution and one ledger posting;
+invalid references are rejected. Activation is safe to re-run; each
 connection's callback sits behind its own token.
+
+## Security headers
+
+`CHAMACORE_DEBUG=false` builds emit `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer`, and
+`Strict-Transport-Security: max-age=63072000; includeSubDomains` by default as
+a defense-in-depth fallback (production-readiness brief 3.5). The **primary**
+source of the strictest set of headers is your reverse proxy (nginx/ALB);
+terminate TLS there and keep HSTS consistent end to end.
 
 ## Operational checklist
 
 - [ ] `CHAMACORE_DEBUG=false`, real JWT secret, real credential key set
 - [ ] Migrations applied before code rollout
 - [ ] Behind TLS-terminating reverse proxy
-- [ ] Backups configured and restore-tested
-- [ ] Prometheus scraping `/metrics`, alerting on `count_total` and 5xx rate
+- [ ] Security headers verified at the proxy and in the app response
+- [ ] `CHAMACORE_METRICS_TOKEN` set; Prometheus scraping `/metrics` with the header, alerting on `count_total` and 5xx rate
+- [ ] Clients implemented against the 120-minute access-token + refresh flow
 - [ ] `X-REQUEST-ID` forwarded by the proxy
+- [ ] Backups configured and restore-tested
 - [ ] Single uvicorn process (or shared rate-limit store when scaled)

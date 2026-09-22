@@ -27,10 +27,13 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./chamacore.db"
 
     # JWT signing. The default secret is for local development only and
-    # MUST be overridden in any deployed environment.
+    # MUST be overridden in any deployed environment. Access tokens have a
+    # short lifetime by default (120 minutes, production-readiness brief 3.1);
+    # clients refresh them via POST /api/v1/auth/refresh.
     jwt_secret_key: str = "local-development-only-secret-change-me-in-prod"
     jwt_algorithm: str = "HS256"
-    jwt_expires_minutes: int = 60 * 24
+    jwt_expires_minutes: int = 120
+    refresh_token_expires_days: int = 30
 
     # Global share unit price in KES (ADR-005).
     share_unit_price: Decimal = Decimal("100")
@@ -76,6 +79,13 @@ class Settings(BaseSettings):
     payment_initiate_daily_limit: int = 5000
     payment_validate_per_minute_limit: int = 5
     payment_webhook_per_minute_limit: int = 60
+
+    # Prometheus /metrics protection (production-readiness brief 3.3).
+    # In production (CHAMACORE_DEBUG=false) the endpoint is reachable only
+    # with this shared secret via the X-Metrics-Token header; if it is left
+    # empty the endpoint returns 404 so the scrape path is never public.
+    # Local development keeps /metrics open when CHAMACORE_DEBUG=true.
+    metrics_token: str = ""
 
     def model_post_init(self, __context) -> None:
         default_secret = "local-development-only-secret-change-me-in-prod"

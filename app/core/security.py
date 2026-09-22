@@ -1,10 +1,13 @@
 """Password hashing and JWT token helpers."""
 
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import jwt
 from pwdlib import PasswordHash
+from pwdlib.exceptions import UnknownHashError
 
 from app.core.config import get_settings
 
@@ -16,7 +19,13 @@ def hash_password(plain_password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return password_hash.verify(plain_password, hashed_password)
+    try:
+        return password_hash.verify(plain_password, hashed_password)
+    except UnknownHashError:
+        # A stored hash that is not a supported scheme (for example the
+        # non-login sentinel on system@chamacore.invalid) must fail closed as
+        # a bad credential, never crash the login path.
+        return False
 
 
 def create_access_token(subject: str) -> str:
@@ -34,3 +43,13 @@ def decode_access_token(token: str) -> str | None:
         return None
     subject = payload.get("sub")
     return subject if isinstance(subject, str) else None
+
+
+def generate_refresh_token() -> str:
+    """Return a new opaque refresh token (128 bits of entropy, URL-safe)."""
+    return secrets.token_urlsafe(48)
+
+
+def hash_refresh_token(refresh_token: str) -> str:
+    """Return the SHA-256 digest stored server-side for a refresh token."""
+    return hashlib.sha256(refresh_token.encode("ascii")).hexdigest()

@@ -26,9 +26,14 @@ Chama, and contribution-to-ledger posting with compensating reversals
 Daraja adapter (Jenga code retained but not registered — Daraja is the only
 active provider), sealed payment connection lifecycle, payment intent/attempt
 state machines, C2B Paybill intake, STK/contribution settlement (ADR-019),
-and a deduplicated webhook inbox. Of 286 automated tests, 259 pass and 27 are
-deferred (skipped); native PostgreSQL concurrency and trigger paths are
-additionally run in CI.
+and a deduplicated webhook inbox. Production-readiness hardening is applied:
+short-lived access tokens (120 minutes) with a rotating refresh-token flow,
+interactive docs and the raw OpenAPI schema disabled in production, `/metrics`
+protected by a shared token (404 otherwise), and minimal security headers in
+production builds. Ledger account balances and per-account entries are exposed
+read-only, always computed from posted entries. Of 307 automated tests, 280
+pass and 27 are deferred (skipped); native PostgreSQL concurrency and trigger
+paths are additionally run in CI.
 
 ### Quick start
 
@@ -41,7 +46,8 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-API docs are available at `/docs`. Run the test suite with `pytest`.
+API docs are available at `/docs` in debug builds (disabled in production).
+Run the test suite with `pytest`.
 Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
 
 ### Implemented
@@ -88,6 +94,23 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
   and confirmation-to-contribution settlement with ledger posting.
 - STK settlement (ADR-019): a succeeded payment intent settles its linked
   contribution as the system user, idempotently.
+- Authentication hardening (production-readiness brief 3.1, 3.6): access
+  tokens default to a 120-minute lifetime with `expires_in` in the token
+  response, a rotating single-use refresh-token flow
+  (`POST /api/v1/auth/refresh`), logout revocation
+  (`POST /api/v1/auth/logout`), and the system posting account rejected at
+  login. Migration `a1f0c3e5b7d9` adds the `refresh_tokens` table.
+- Production API surface (brief 3.2, 3.3, 3.5): `/docs`, `/redoc`, and
+  `/openapi.json` return 404 when `CHAMACORE_DEBUG=false`; `/metrics` requires
+  `X-Metrics-Token` matching `CHAMACORE_METRICS_TOKEN` (404 if unset or wrong)
+  in production; production builds send `X-Content-Type-Options`,
+  `Referrer-Policy`, and `Strict-Transport-Security` as defense in depth.
+- Ledger account balances and statements (brief 4.2): read-only
+  `GET /chamas/{chama_id}/ledger/accounts` (signed balances always computed
+  from posted entries) and
+  `GET /chamas/{chama_id}/ledger/accounts/{account_id}/entries` with the same
+  cursor pagination as transaction history, Chama-scoped authorization
+  enforced on both.
 - Observability: single-line JSON structured logs with `X-Request-ID`
   correlation ids echoed on responses, Prometheus `/metrics` endpoint,
   general per-IP API rate limiting beyond auth
@@ -99,7 +122,8 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
 
 - Registration-fee payments on the ledger (blocked by OQ-014)
 - Loans, loan repayments, payouts (blocked by OQ-015..OQ-020)
-- Ledger-backed balances/reports
+- Aggregated reports/balances beyond the read-only ledger account balances
+  and per-account entries
 - Audit event table
 - Bank reconciliation
 - Notifications
@@ -114,10 +138,13 @@ For any deployed environment:
 export CHAMACORE_DEBUG=false
 export CHAMACORE_JWT_SECRET_KEY="<a-strong-random-secret>"
 export CHAMACORE_DATABASE_URL="postgresql+psycopg://user:pass@host:5432/dbname"
+export CHAMACORE_METRICS_TOKEN="<a-strong-random-secret>"
 ```
 
 The application will refuse to start if `CHAMACORE_DEBUG` is false and
-the JWT secret is still the local-development default.
+the JWT secret is still the local-development default. With
+`CHAMACORE_DEBUG=false`, API docs are hidden and `/metrics` requires the
+`X-Metrics-Token` header.
 
 See `docs/12_PRODUCTION_RUNBOOK.md` for the full environment variable table,
 migrations, secrets, backups, and monitoring guidance.

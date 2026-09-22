@@ -34,6 +34,7 @@ from app.models.payment_connection_audit import PaymentConnectionAudit
 from app.models.payment_event import PaymentEvent
 from app.models.payment_intent import PaymentIntent
 from app.models.provider_transaction import ProviderTransaction
+from app.models.refresh_token import RefreshToken
 from app.models.registration_fee import RegistrationFee
 from app.models.role import Role
 from app.models.share import Share
@@ -69,6 +70,7 @@ __all__ = [
     "PaymentTransferSource",
     "ProviderTransaction",
     "ProviderTransactionStatus",
+    "RefreshToken",
     "RegistrationFee",
     "RegistrationFeeStatus",
     "Role",

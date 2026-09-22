@@ -23,6 +23,29 @@ The V2 financial open questions OQ-012, OQ-013, and OQ-021 are resolved
   system-triggered settlements run as the seeded system user
   (`system@chamacore.invalid`).
 
+## Status note (22 Sep 2026, production readiness)
+
+Following `reports/ChamaCore_Developer_Implementation_Brief.md`, production
+hardening and read-only ledger reporting landed on `main`:
+
+- Access tokens are short-lived by default (120 minutes) with a rotating,
+  single-use refresh-token flow (`POST /api/v1/auth/refresh`) and logout
+  revocation; only the SHA-256 digest of each refresh token is stored
+  (migration `a1f0c3e5b7d9`).
+- The system posting account can never obtain a JWT (the non-login sentinel
+  hash now fails login cleanly instead of raising).
+- `/docs`, `/redoc`, and `/openapi.json` are disabled unless
+  `CHAMACORE_DEBUG=true`; `/metrics` is protected by `CHAMACORE_METRICS_TOKEN`
+  via the `X-Metrics-Token` header and 404s otherwise in production.
+- Production builds send `X-Content-Type-Options`, `Referrer-Policy`, and
+  `Strict-Transport-Security` headers (defense in depth behind the proxy).
+- Read-only ledger account balances and per-account entries
+  (`GET /chamas/{chama_id}/ledger/accounts[ /{account_id}/entries]`), always
+  computed from posted entries, Chama-scoped.
+- The runbook's C2B section now documents the approved ADR-019 behaviour and
+  adds an explicit operational checklist (brief 3.4); the no-op rule for a
+  succeeded STK intent without a linked contribution is documented.
+
 ## Status note (17 Sep 2026)
 
 Following the independent code-review reports (`reports/Overall_ChamaCore_
@@ -86,9 +109,10 @@ uvicorn app.main:app --reload
 pytest
 ```
 
-Of 286 tests, 259 pass on SQLite and 27 are deferred (skipped); native
-PostgreSQL concurrency and trigger paths run in CI. Swagger docs are available
-at `/docs`.
+Of 307 tests, 280 pass on SQLite and 27 are deferred (skipped); native
+PostgreSQL concurrency and trigger paths run in CI. Interactive Swagger docs
+(`/docs`) and the raw OpenAPI schema are available only in debug builds
+(`CHAMACORE_DEBUG=true`) and are disabled in production.
 
 ## Implemented
 
@@ -99,7 +123,7 @@ at `/docs`.
 - Database sessions
 - Alembic migrations (initial V1 schema, V1 unique constraints, V2 ledger,
   V2 ledger hardening, V3 payment tables, system-user + chart-of-accounts
-  backfill `f2b4d6a8e0c1`)
+  backfill `f2b4d6a8e0c1`, refresh-token table `a1f0c3e5b7d9`)
 - SQLite for development; PostgreSQL support for production
 - Authentication (register, token, me, member-link)
 - Authorization (membership-based, verified per Chama-scoped query)
@@ -110,6 +134,9 @@ at `/docs`.
 - V2 ledger posting service with balance/side/non-negativity validation,
   quantization-before-validation, and source-reference idempotency
 - V2 financial transaction history endpoint with cursor pagination
+- V2 read-only ledger account balances and per-account entries
+  (`GET /chamas/{chama_id}/ledger/accounts[ /{account_id}/entries]`),
+  always computed from posted entries, Chama-scoped (brief 4.2)
 - V2 compensating-entry reversal for the ledger
 - V2 hardening: composite FKs, append-only DB triggers, CHECK constraints,
   partial unique index for reversals, idempotency conflict handling,
@@ -153,6 +180,17 @@ at `/docs`.
   latency histograms, bounded route-template labels (`app/core/metrics.py`)
 - General per-IP API rate limiting beyond auth, plus the existing
   auth/payment/webhook limits (all in-process)
+- Auth session hardening (brief 3.1, 3.6): short access tokens
+  (`CHAMACORE_JWT_EXPIRES_MINUTES`, default 120; `expires_in` in the token
+  response), rotating single-use refresh tokens
+  (`POST /api/v1/auth/refresh`, only SHA-256 digests stored in
+  `refresh_tokens`), logout revocation (`POST /api/v1/auth/logout`,
+  idempotent), and the system posting account rejected at login
+- Production API surface (brief 3.2, 3.3, 3.5): `/docs`, `/redoc`, and
+  `/openapi.json` disabled unless `CHAMACORE_DEBUG=true`; `/metrics` requires
+  `X-Metrics-Token` matching `CHAMACORE_METRICS_TOKEN` in production (404
+  without/on mismatch); production builds emit `X-Content-Type-Options`,
+  `Referrer-Policy`, and `Strict-Transport-Security` headers
 - Daraja-only provider focus (17 Sep 2026): Jenga is no longer registered,
   so no new Jenga connection can be created; the Jenga adapter code and
   `JENGA` enum value are retained for a one-line rollback. Sandbox
@@ -173,7 +211,8 @@ at `/docs`.
   constraint backstop, JWT config, health, ledger posting/idempotency/
   reversal/authorization/db-enforcement/concurrency, credential cipher,
   payment connections, payment intents, payment webhooks, provider adapters,
-  C2B callbacks and register-URL activation)
+  C2B callbacks and register-URL activation, refresh-token flow, production
+  docs/metrics/header gating, ledger account balances and entries)
 - PostgreSQL test target (Docker Compose + CI workflow)
 - Approved decisions recorded in ADRs and `docs/decisions/`
 
@@ -184,7 +223,8 @@ at `/docs`.
 - Live Jenga/Daraja sandbox integration tests (requires live test accounts)
 - Frontend
 - Bank reconciliation
-- Reports
+- Reports beyond the read-only ledger account balances and per-account
+  entries
 - Notifications
 - USSD
 
@@ -213,7 +253,14 @@ and payouts await the remaining V2 financial decisions (OQ-014..OQ-020).
 > contribution confirmation posts DR Cash / CR Share Capital idempotently
 > (ADR-014), C2B resolves `BillRefNumber` to an ACTIVE membership and settles
 > the current-period contribution, and succeeded STK intents settle their
-> linked contribution (ADR-019). Tests: 259 passed + 27 deferred (286 total).
+> linked contribution (ADR-019). 22 Sep production readiness
+> (`reports/ChamaCore_Developer_Implementation_Brief.md`): short-lived access
+> tokens with a rotating single-use refresh flow (migration `a1f0c3e5b7d9`),
+> system-account login rejected cleanly, interactive docs/openapi disabled in
+> production, `/metrics` guarded by `CHAMACORE_METRICS_TOKEN`, minimal security
+> headers in production builds, read-only ledger account balances/entries
+> (brief 4.2), and the runbook C2B/checklist updates (brief 3.4). Tests:
+> 280 passed + 27 deferred (307 total).
 
 Reports: `reports/03_V2LedgerReviewReport.md` (independent review findings),
 `reports/04_V2LedgerHardening.md` (evidence that findings were addressed),

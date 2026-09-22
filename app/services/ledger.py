@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, StateError
 from app.models.enums import LedgerAccountType
 from app.models.ledger_account import LedgerAccount
+from app.models.ledger_entry import LedgerEntry
 from app.models.ledger_transaction import LedgerTransaction
 from app.models.user import User
 from app.repositories.ledger import LedgerAccountRepository, LedgerRepository
@@ -189,6 +190,45 @@ class LedgerService:
         authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
         return self.ledger.list_page(
             chama.id,
+            limit=limit,
+            before_created_at=before_created_at,
+            before_id=before_id,
+        )
+
+    def list_accounts(
+        self, *, actor: User, chama_id: uuid.UUID
+    ) -> list[tuple[LedgerAccount, Decimal]]:
+        """Return ``(account, balance)`` pairs for every account in the Chama.
+
+        Balances are computed from posted entries on demand; nothing is
+        denormalized (production-readiness brief 4.2).
+        """
+        chama = get_chama_or_404(self.db, chama_id)
+        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        accounts = self.accounts.list_in_chama(chama.id)
+        balances = self.accounts.balances_in_chama(chama.id)
+        return [
+            (account, balances.get(account.id, Decimal("0.00"))) for account in accounts
+        ]
+
+    def list_account_entries_page(
+        self,
+        *,
+        actor: User,
+        chama_id: uuid.UUID,
+        account_id: uuid.UUID,
+        limit: int,
+        before_created_at: datetime | None,
+        before_id: uuid.UUID | None,
+    ) -> list[LedgerEntry]:
+        chama = get_chama_or_404(self.db, chama_id)
+        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        account = self.accounts.get_in_chama(chama.id, account_id)
+        if account is None:
+            raise StateError("Ledger account not found in this Chama")
+        return self.ledger.list_entries_page(
+            chama.id,
+            account_id,
             limit=limit,
             before_created_at=before_created_at,
             before_id=before_id,

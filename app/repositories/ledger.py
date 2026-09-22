@@ -21,6 +21,37 @@ class LedgerAccountRepository(BaseRepository):
             )
         ).first()
 
+    def list_in_chama(self, chama_id: uuid.UUID) -> list[LedgerAccount]:
+        stmt = (
+            select(LedgerAccount)
+            .where(LedgerAccount.chama_id == chama_id)
+            .order_by(LedgerAccount.code, LedgerAccount.id)
+        )
+        return list(self.db.scalars(stmt))
+
+    def balances_in_chama(self, chama_id: uuid.UUID) -> dict[uuid.UUID, Decimal]:
+        """Return ``{account_id: balance}`` where balance = sum(debit) - sum(credit).
+
+        Balances are always computed from posted ledger entries; no balance is
+        ever denormalized on the account row (production-readiness brief 4.2).
+        Accounts with no entries simply have no row here (balance zero).
+        """
+        rows = self.db.execute(
+            select(
+                LedgerEntry.account_id,
+                func.coalesce(
+                    func.sum(LedgerEntry.debit) - func.sum(LedgerEntry.credit),
+                    Decimal("0"),
+                ),
+            )
+            .where(LedgerEntry.chama_id == chama_id)
+            .group_by(LedgerEntry.account_id)
+        )
+        return {
+            account_id: Decimal(balance).quantize(Decimal("0.01"))
+            for account_id, balance in rows
+        }
+
 
 class LedgerRepository(BaseRepository):
     def get_by_source(self, source_type: str, source_id: uuid.UUID) -> LedgerTransaction | None:
@@ -100,6 +131,52 @@ class LedgerRepository(BaseRepository):
                     and_(
                         ts_col == ts_param,
                         LedgerTransaction.id < before_id,
+                    ),
+                )
+            )
+        return list(self.db.scalars(stmt))
+
+    def list_entries_page(
+        self,
+        chama_id: uuid.UUID,
+        account_id: uuid.UUID,
+        *,
+        limit: int,
+        before_created_at: datetime | None,
+        before_id: uuid.UUID | None,
+    ) -> list[LedgerEntry]:
+        """Return Chronologically *newest-first* entries for one account.
+
+        Uses the same keyset pagination contract as ``list_page``.
+        """
+        is_sqlite = inspect(self.db.get_bind()).dialect.name == "sqlite"
+        if is_sqlite:
+            ts_col = func.strftime("%Y-%m-%d %H:%M:%S", LedgerEntry.created_at)
+            ts_param = before_created_at.strftime("%Y-%m-%d %H:%M:%S") if before_created_at else None
+        else:
+            ts_col = LedgerEntry.created_at
+            ts_param = before_created_at
+
+        stmt = (
+            select(LedgerEntry)
+            .options(
+                selectinload(LedgerEntry.transaction),
+                selectinload(LedgerEntry.account),
+            )
+            .where(
+                LedgerEntry.chama_id == chama_id,
+                LedgerEntry.account_id == account_id,
+            )
+            .order_by(LedgerEntry.created_at.desc(), LedgerEntry.id.desc())
+            .limit(limit)
+        )
+        if ts_param is not None:
+            stmt = stmt.where(
+                or_(
+                    ts_col < ts_param,
+                    and_(
+                        ts_col == ts_param,
+                        LedgerEntry.id < before_id,
                     ),
                 )
             )

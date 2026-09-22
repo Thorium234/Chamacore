@@ -29,6 +29,8 @@ class Period(str):
 # Monetary values use Decimal and never float (AGENTS financial rules).
 Money = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)]
 PositiveMoney = Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=2)]
+# Signed ledger balance (debit - credit): negative for credit-side accounts.
+SignedMoney = Annotated[Decimal, Field(max_digits=18, decimal_places=2)]
 
 # Share units are stored with 4 decimal places (ADR-005).
 Quantity = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=4)]

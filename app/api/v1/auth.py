@@ -1,6 +1,6 @@
 """Authentication endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -10,9 +10,11 @@ from app.api.deps import (
     check_token_rate_limit,
     get_current_user,
 )
+from app.core.config import get_settings
+from app.core.errors import StateError
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.user import MemberLinkRequest, RegisterRequest, TokenOut, UserOut
+from app.schemas.user import LogoutRequest, MemberLinkRequest, RefreshRequest, RegisterRequest, TokenOut, UserOut
 from app.services.auth import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -41,7 +43,35 @@ def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return TokenOut(access_token=service.issue_token(user))
+    session = service.create_auth_session(user)
+    return _to_token_out(session)
+
+
+@router.post("/refresh", response_model=TokenOut)
+def refresh(
+    data: RefreshRequest,
+    db: Session = Depends(get_db),
+    _rate_limit: None = Depends(check_token_rate_limit),
+) -> TokenOut:
+    try:
+        session = AuthService(db).rotate_refresh_token(refresh_token=data.refresh_token)
+    except StateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=exc.message,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return _to_token_out(session)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    data: LogoutRequest,
+    db: Session = Depends(get_db),
+    _rate_limit: None = Depends(check_token_rate_limit),
+) -> Response:
+    AuthService(db).revoke_refresh_token(refresh_token=data.refresh_token)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/me/member-link", response_model=UserOut)
@@ -59,3 +89,12 @@ def link_me_to_member(
 @router.get("/me", response_model=UserOut)
 def me(actor: User = Depends(get_current_user)) -> User:
     return actor
+
+
+def _to_token_out(session: dict[str, str]) -> TokenOut:
+    settings = get_settings()
+    return TokenOut(
+        access_token=session["access_token"],
+        refresh_token=session["refresh_token"],
+        expires_in=settings.jwt_expires_minutes * 60,
+    )
