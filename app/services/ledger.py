@@ -5,17 +5,31 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, StateError
+from app.models.enums import LedgerAccountType
+from app.models.ledger_account import LedgerAccount
 from app.models.ledger_transaction import LedgerTransaction
 from app.models.user import User
 from app.repositories.ledger import LedgerAccountRepository, LedgerRepository
 from app.services.access import authorize_chama_access, get_chama_or_404
 
 REVERSAL_SOURCE_TYPE = "LEDGER_REVERSAL"
+CONTRIBUTION_SOURCE_TYPE = "CONTRIBUTION_CONFIRMATION"
 CENT = Decimal("0.01")
+
+CASH_CODE = "1000"
+SHARE_CAPITAL_CODE = "3000"
+REGISTRATION_FEES_CODE = "4000"
+
+CHART_ACCOUNTS = (
+    (CASH_CODE, "Cash", LedgerAccountType.ASSET, "Money held for the Chama"),
+    (SHARE_CAPITAL_CODE, "Share Capital", LedgerAccountType.EQUITY, "Member contributions recorded as share capital"),
+    (REGISTRATION_FEES_CODE, "Registration Fees", LedgerAccountType.REVENUE, "Income from member registration fees"),
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +45,31 @@ class LedgerService:
         self.ledger = LedgerRepository(db)
         self.accounts = LedgerAccountRepository(db)
 
+    def seed_default_chart_of_accounts(self, chama_id: uuid.UUID) -> None:
+        """Seed the default chart of accounts for a Chama (OQ-012).
+
+        Idempotent get-or-create per ``(chama_id, code)`` so it is safe for
+        new creations and the data backfill migration.
+        """
+        for code, name, account_type, description in CHART_ACCOUNTS:
+            existing = self.db.scalars(
+                select(LedgerAccount).where(
+                    LedgerAccount.chama_id == chama_id, LedgerAccount.code == code
+                )
+            ).first()
+            if existing is not None:
+                continue
+            self.db.add(
+                LedgerAccount(
+                    chama_id=chama_id,
+                    code=code,
+                    name=name,
+                    account_type=account_type,
+                    description=description,
+                )
+            )
+        self.db.flush()
+
     def post_transaction(
         self,
         *,
@@ -41,6 +80,7 @@ class LedgerService:
         description: str | None,
         lines: list[LedgerLine],
         reverses_transaction_id: uuid.UUID | None = None,
+        require_membership: bool = True,
     ) -> LedgerTransaction:
         """Post one balanced immutable ledger transaction.
 
@@ -48,9 +88,15 @@ class LedgerService:
         retry: the existing transaction is returned only when the normalized
         payload (Chama, description, reversal reference, and ledger lines)
         matches. A conflicting retry raises ``ConflictError``.
+
+        ``require_membership`` gates the actor-membership authorization. It
+        must stay enabled for every human actor; system-triggered postings
+        (STK settlement, C2B confirmation) run as the system user and pass
+        ``False``.
         """
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        if require_membership:
+            authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
 
         lines = self._normalize_lines(lines)
         self._validate_lines(chama.id, lines)

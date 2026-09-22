@@ -18,15 +18,17 @@ The long-term system is intended to support:
 ## Current status
 
 V1 (Chama Foundation) and V2 (Financial Core) are implemented: the immutable
-double-entry ledger, financial transaction history, and V2 ledger hardening
+double-entry ledger, financial transaction history, V2 ledger hardening
 (composite FKs, append-only DB triggers, CHECK constraints, cursor
-pagination, idempotency conflict handling) are delivered. V3 (Payment
-Architecture) is implemented: provider-port boundary, Daraja adapter (Jenga
-code retained but not registered — Daraja is the only active provider), sealed
-payment connection lifecycle, payment intent/attempt state machines, and a
-deduplicated webhook inbox. Of 259 automated tests, 232 pass and 27 Jenga
-adapter contract tests are deferred (skipped); native PostgreSQL concurrency
-and trigger paths are additionally run in CI.
+pagination, idempotency conflict handling), chart-of-accounts seeding per
+Chama, and contribution-to-ledger posting with compensating reversals
+(ADR-014). V3 (Payment Architecture) is implemented: provider-port boundary,
+Daraja adapter (Jenga code retained but not registered — Daraja is the only
+active provider), sealed payment connection lifecycle, payment intent/attempt
+state machines, C2B Paybill intake, STK/contribution settlement (ADR-019),
+and a deduplicated webhook inbox. Of 286 automated tests, 259 pass and 27 are
+deferred (skipped); native PostgreSQL concurrency and trigger paths are
+additionally run in CI.
 
 ### Quick start
 
@@ -61,6 +63,13 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
   triggers, account-type/non-blank CHECK constraints, one-reversal-per-
   transaction partial unique index, cursor pagination, quantization-before-
   validation, idempotency conflict handling
+- V2 chart of accounts seeded per Chama (OQ-012 / ADR-019): `1000` Cash,
+  `3000` Share Capital, `4000` Registration Fees; existing Chamas backfilled
+  by migration `f2b4d6a8e0c1`
+- V2 contribution-to-ledger posting (ADR-014, OQ-013): confirmation debits
+  Cash / credits Share Capital idempotently; reversal posts a compensating
+  reversal; system-triggered settlements run as the seeded system user
+  (`system@chamacore.invalid`)
 - V3 payment architecture: provider-port boundary (ADR-016), payment
   connection lifecycle (ADR-017), webhook inbox and event deduplication
   (ADR-018), AES-GCM sealed credentials, Jenga and Daraja adapter contract
@@ -70,14 +79,15 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
   are cached per consumer key (~50 minutes). Sandbox bootstrapping via
   `scripts/create_daraja_connection.py`; one-time C2B activation via
   `scripts/register_daraja_c2b_urls.py`.
-- C2B (manual Paybill money-in) plumbing (report 2026-09-17): strict callback
-  schemas, `/payments/c2b/validate/{connection_id}` and
+- C2B (manual Paybill money-in, OQ-021 / ADR-019): strict callback schemas
+  and `/payments/c2b/validate/{connection_id}` and
   `/payments/c2b/confirm/{connection_id}` endpoints with token binding,
-  `TransID`-based idempotency and duplicate/disagreement detection, and a
-  chairperson-only register-URL activation endpoint. Validation is
-  **fail-closed** (`ResultCode 1`) and confirmation never writes the ledger:
-  both wait on the `BillRefNumber`-to-Chama/member rule (OQ-021, gated by
-  OQ-012/OQ-013).
+  `TransID`-based idempotency and duplicate/disagreement detection, a
+  chairperson-only register-URL activation endpoint, `BillRefNumber` =
+  membership number resolved to an ACTIVE membership on an ACTIVE connection,
+  and confirmation-to-contribution settlement with ledger posting.
+- STK settlement (ADR-019): a succeeded payment intent settles its linked
+  contribution as the system user, idempotently.
 - Observability: single-line JSON structured logs with `X-Request-ID`
   correlation ids echoed on responses, Prometheus `/metrics` endpoint,
   general per-IP API rate limiting beyond auth
@@ -87,8 +97,8 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
 
 ### Not implemented (V2+, blocked or deferred)
 
-- Loans, loan repayments, payouts (blocked by open questions)
-- Contribution-to-ledger posting (blocked by open questions)
+- Registration-fee payments on the ledger (blocked by OQ-014)
+- Loans, loan repayments, payouts (blocked by OQ-015..OQ-020)
 - Ledger-backed balances/reports
 - Audit event table
 - Bank reconciliation

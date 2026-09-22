@@ -19,7 +19,7 @@ from app.models.ledger_entry import LedgerEntry
 from app.models.ledger_transaction import LedgerTransaction
 from app.services.ledger import REVERSAL_SOURCE_TYPE
 
-from tests.test_ledger import _add_account, _get_user, _post, _setup
+from tests.test_ledger import _get_user, _post, _setup
 
 
 def _first_entry(db, transaction_id: uuid.UUID) -> LedgerEntry:

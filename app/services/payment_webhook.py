@@ -11,9 +11,11 @@ Every inbound callback passes through a provider-neutral pipeline:
 6. parsing and storage of the raw payload under the retention policy,
 7. a safe state transition with amount matching and out-of-order handling.
 
-Callbacks never change a contributed/ledger record. They only advance the
-payment attempt and intent state machines (ADR-016). Disagreements surface
-as ``DISAGREEMENT`` events for reconciliation rather than a silent override.
+Callbacks advance the payment attempt and intent state machines (ADR-016) and,
+when the intent carries a ``contribution_id`` and reaches SUCCEEDED, settle the
+linked contribution through the OQ-013 ledger posting path as the system user
+(ADR-019). Disagreements surface as ``DISAGREEMENT`` events for reconciliation
+rather than a silent override.
 """
 
 import uuid
@@ -42,6 +44,7 @@ from app.repositories.payment import (
     PaymentIntentRepository,
     ProviderTransactionRepository,
 )
+from app.services.settlement import settle_linked_contribution
 
 _webhook_limiter = RateLimiter(get_settings().payment_webhook_per_minute_limit, 60.0)
 
@@ -304,6 +307,8 @@ class PaymentWebhookService:
                 intent.status = PaymentIntentStatus.SUCCEEDED
                 intent.last_transition_source = PaymentTransferSource.PROVIDER_CALLBACK
                 intent.last_transition_by_user_id = None
+            if intent.contribution_id is not None:
+                settle_linked_contribution(self.db, payment_intent=intent)
         else:
             attempt.status = PaymentAttemptStatus.FAILED
             attempt.completed_at = now

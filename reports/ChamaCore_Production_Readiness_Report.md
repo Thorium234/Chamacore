@@ -5,6 +5,30 @@
 **Report date:** 2026-09-17  
 **Audience:** Developer / operator preparing a production push with a frontend and Daraja
 
+> **Addendum (22 Sep 2026).** The decisions this report said were missing are
+> now resolved and implemented (ADR-014 approved, ADR-019 added; OQ-012,
+> OQ-013, OQ-021 closed):
+>
+> - Every Chama is seeded with a default chart of accounts — `1000` Cash
+>   (ASSET), `3000` Share Capital (EQUITY), `4000` Registration Fees
+>   (REVENUE) — at creation; existing Chamas are backfilled by migration
+>   `f2b4d6a8e0c1`.
+> - Confirming a contribution posts DR Cash / CR Share Capital idempotently
+>   (source `CONTRIBUTION_CONFIRMATION:<id>`); reversing one posts a
+>   compensating reversal.
+> - C2B validation now resolves `BillRefNumber` (the server-assigned
+>   membership number) against an ACTIVE membership on an ACTIVE connection;
+>   C2B confirmation creates/settles the current-period contribution and
+>   posts to the ledger (`TransID`-idempotent).
+> - Succeeded STK payment intents settle their linked contribution; manual
+>   and system-triggered settlements run as the seeded, non-login system user
+>   (`system@chamacore.invalid`).
+>
+> Rows below marked **Open / Plumbing only / Not wired** for OQ-012, OQ-013,
+> OQ-021, C2B, and STK-settlement are superseded by the above. Loans,
+> payouts, and registration-fee payments (OQ-014..OQ-020) remain open, as do
+> the operator-configuration items (secrets, HTTPS public URL).
+
 ---
 
 ## 1. Executive summary

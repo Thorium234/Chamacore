@@ -1,4 +1,4 @@
-"""C2B (manual Paybill money-in) validation and confirmation (ADR-016).
+"""C2B (manual Paybill money-in) validation and confirmation (ADR-016, OQ-021).
 
 Safaricom calls the Validation URL before processing a manual Paybill payment
 (yielding accept/reject) and the Confirmation URL after a successful payment
@@ -7,19 +7,29 @@ payment is initiated by the customer rather than by a payment attempt, so it
 binds to a connection by ``connection_id`` + callback token instead of by a
 provider request id.
 
-Fail-closed contract (OQ-021, see ``docs/decisions/OPEN_QUESTIONS.md``):
+OQ-021 contract (ADR-019):
 
-- Validation ALWAYS rejects (``ResultCode`` 1) because no approved rule maps
-  ``BillRefNumber`` to a member yet. The rejection is recorded immutably.
-- Confirmation is stored idempotently (deduplicated by ``TransID``) in the
-  event inbox and acknowledged, but performs NO ledger or contribution write:
-  crediting the member's balance is blocked by OQ-012/OQ-013 and OQ-021.
+- A connection is a single short code bound to exactly one Chama; a payload
+  whose ``BusinessShortCode`` does not match the connection is unmatched.
+- ``BillRefNumber`` is the string form of the member's ``membership_number``.
+- Validation ACCEPTS (``ResultCode`` 0) only when the connection is ACTIVE,
+  the payload parses, the short code matches, the reference is a valid
+  membership number, and the matching membership is ACTIVE. Everything else is
+  REJECTED (``ResultCode`` 1) and recorded immutably; unknown references are
+  also stored so reconciliation has an audit trail.
+- Confirmation is stored idempotently (deduplicated by ``TransID``), creates a
+  CONFIRMED contribution for the current ``YYYY-MM`` period when no open
+  contribution exists (amount = ``TransAmount``), and posts the money through
+  the OQ-013 ledger path as the system user. Disagreements (unmatched
+  reference, inactive member, or an amount that differs from the period's open
+  recorded contribution) surface as ``DISAGREEMENT`` events.
 """
 
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -28,11 +38,16 @@ from app.core.config import get_settings
 from app.core.credential_cipher import CredentialCipher, CredentialCipherError
 from app.core.errors import RateLimitError, WebhookRejectedError
 from app.core.ratelimit import RateLimiter
-from app.models.enums import PaymentEventStatus
+from app.db.bootstrap import ensure_system_user, system_user_id
+from app.models.contribution import Contribution
+from app.models.enums import ContributionStatus, PaymentEventStatus
 from app.models.payment_event import PaymentEvent
 from app.providers import provider_registry
 from app.providers.base import ConnectionContext
+from app.repositories.contribution import ContributionRepository
+from app.repositories.membership import MembershipRepository
 from app.repositories.payment import PaymentConnectionRepository, PaymentEventRepository
+from app.services.contribution import ContributionService
 
 VALIDATION_EVENT_PREFIX = "C2B_VALIDATION:"
 CONFIRMATION_EVENT_PREFIX = "C2B_CONFIRMATION:"
@@ -58,9 +73,12 @@ class C2BPaymentService:
         self.settings = get_settings()
         self.connections = PaymentConnectionRepository(db)
         self.events = PaymentEventRepository(db)
+        self.contribution_service = ContributionService(db)
+        self.contributions = ContributionRepository(db)
+        self.memberships = MembershipRepository(db)
         self.cipher = CredentialCipher(settings=get_settings())
 
-    # -- validation (always fail-closed until OQ-021) -----------------------
+    # -- validation (OQ-021) ------------------------------------------------
 
     def validate(
         self,
@@ -83,23 +101,45 @@ class C2BPaymentService:
                 result_code=1, result_description=f"Rejected: {exc.message}"
             )
 
+        accepted, reason = self._evaluate(connection, parsed)
         self._store_event(
             connection=connection,
             raw_payload=raw_payload,
             parsed=parsed,
             event_prefix=VALIDATION_EVENT_PREFIX,
-            status=PaymentEventStatus.REJECTED,
+            status=PaymentEventStatus.PROCESSED if accepted else PaymentEventStatus.REJECTED,
             transition_source="C2B_VALIDATION",
         )
         return C2BValidationDecision(
-            result_code=1,
-            result_description=(
-                "Rejected: manual Paybill reference matching is not configured yet "
-                "(OQ-021 pending)"
-            ),
+            result_code=0 if accepted else 1,
+            result_description=reason,
+            accepted=accepted,
         )
 
-    # -- confirmation (store idempotently, acknowledge, no ledger write) ----
+    def _evaluate(self, connection, parsed) -> tuple[bool, str]:
+        if connection.status.value != "ACTIVE":
+            return False, "Rejected: the payment connection is not active"
+        if parsed is None or not parsed.is_parseable:
+            return False, "Rejected: the C2B payload could not be parsed"
+        if not self._business_short_code_matches(connection, parsed):
+            return False, "Rejected: the business short code does not match this connection"
+
+        ref = (parsed.bill_ref_number or "").strip()
+        if not ref:
+            return False, "Rejected: BillRefNumber is missing"
+        try:
+            number = int(ref)
+        except ValueError:
+            return False, "Rejected: BillRefNumber is not a membership number"
+
+        membership = self.memberships.get_by_number(connection.chama_id, number)
+        if membership is None:
+            return False, "Rejected: no member matches this BillRefNumber"
+        if membership.status.value != "ACTIVE":
+            return False, "Rejected: the matching member is not active"
+        return True, f"Accepted: payment for membership number {number}"
+
+    # -- confirmation (OQ-021) ----------------------------------------------
 
     def confirm(
         self,
@@ -115,7 +155,7 @@ class C2BPaymentService:
             connection_id, raw_payload, query_params, capability="C2B_CONFIRMATION"
         )
 
-        if not self._business_short_code_matches(connection, parsed):
+        if connection.status.value != "ACTIVE" or not parsed.is_parseable or not self._business_short_code_matches(connection, parsed):
             return self._store_event(
                 connection=connection,
                 raw_payload=raw_payload,
@@ -125,14 +165,62 @@ class C2BPaymentService:
                 transition_source="C2B_CONFIRMATION",
             )
 
-        return self._store_event(
+        event = self._store_event(
             connection=connection,
             raw_payload=raw_payload,
             parsed=parsed,
             event_prefix=CONFIRMATION_EVENT_PREFIX,
-            status=PaymentEventStatus.PROCESSED,
+            status=PaymentEventStatus.RECEIVED,
             transition_source="C2B_CONFIRMATION",
         )
+        if event.status in (PaymentEventStatus.DEDUPLICATED, PaymentEventStatus.DISAGREEMENT):
+            return event
+
+        try:
+            final_status = self._settle_confirmation(connection, parsed)
+        except IntegrityError:
+            self.db.rollback()
+            final_status = PaymentEventStatus.DISAGREEMENT
+        event.status = final_status
+        event.processed_at = datetime.now(timezone.utc)
+        event.last_transition_source = "C2B_CONFIRMATION"
+        self.db.commit()
+        self.db.refresh(event)
+        return event
+
+    def _settle_confirmation(self, connection, parsed) -> PaymentEventStatus:
+        if parsed.amount is None or parsed.amount <= 0:
+            return PaymentEventStatus.DISAGREEMENT
+        ref = (parsed.bill_ref_number or "").strip()
+        try:
+            number = int(ref)
+        except ValueError:
+            return PaymentEventStatus.DISAGREEMENT
+        membership = self.memberships.get_by_number(connection.chama_id, number)
+        if membership is None or membership.status.value != "ACTIVE":
+            return PaymentEventStatus.DISAGREEMENT
+
+        period = datetime.now(timezone.utc).strftime("%Y-%m")
+        contribution = self._find_open_contribution(membership.id, period)
+        if contribution is None:
+            contribution = self.contributions.create(
+                membership_id=membership.id,
+                amount=parsed.amount,
+                period=period,
+                recorded_by_user_id=system_user_id(),
+                note=f"C2B {parsed.transaction_id}" if parsed.transaction_id else "C2B Paybill",
+            )
+        elif contribution.status == ContributionStatus.CONFIRMED and contribution.amount == parsed.amount:
+            return PaymentEventStatus.PROCESSED
+        elif contribution.amount != parsed.amount:
+            return PaymentEventStatus.DISAGREEMENT
+
+        self.contribution_service._settle(
+            contribution,
+            ensure_system_user(self.db),
+            allow_already_confirmed=True,
+        )
+        return PaymentEventStatus.PROCESSED
 
     # -- binding ------------------------------------------------------------
 
@@ -186,6 +274,14 @@ class C2BPaymentService:
         )
         shaped = adapter.decrypted_credentials(payload, context)
         return str(shaped.get("short_code")) == parsed.business_short_code
+
+    def _find_open_contribution(self, membership_id: uuid.UUID, period: str) -> Contribution | None:
+        stmt = select(Contribution).where(
+            Contribution.membership_id == membership_id,
+            Contribution.period == period,
+            Contribution.status != ContributionStatus.REVERSED,
+        )
+        return self.db.scalars(stmt).first()
 
     # -- event storage ------------------------------------------------------
 

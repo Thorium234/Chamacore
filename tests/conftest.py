@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from app.api.deps import oauth2_scheme, reset_rate_limiters
 from app.core.metrics import reset_metrics
 from app.db.base import Base
+from app.db.bootstrap import ensure_system_user
 from app.db.ledger_guards import create_ledger_guards
 from app.db.session import get_db
 from app.main import app as fastapi_app
@@ -28,6 +29,11 @@ def _seed_roles(session):
     for role in RoleName:
         if role.value not in existing:
             session.add(Role(name=role.value))
+    session.commit()
+
+
+def _seed_system_user(session):
+    ensure_system_user(session)
     session.commit()
 
 
@@ -53,6 +59,7 @@ def db(tmp_path):
         session_factory = sessionmaker(bind=engine, expire_on_commit=False)
         session = session_factory()
         _seed_roles(session)
+        _seed_system_user(session)
         yield session
         session.close()
         Base.metadata.drop_all(engine)
@@ -72,6 +79,7 @@ def db(tmp_path):
         session_factory = sessionmaker(bind=engine, expire_on_commit=False)
         session = session_factory()
         _seed_roles(session)
+        _seed_system_user(session)
         yield session
         session.close()
         engine.dispose()

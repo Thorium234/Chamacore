@@ -113,6 +113,7 @@ money movement; its safety rules must hold at the storage layer.
 
 ## Open questions
 
-Unchanged from ADR-014 and `OPEN_QUESTIONS.md`. In particular, connecting
-confirmed contributions to the ledger (OQ-012/OQ-013) and all loan,
-repayment, and payout rules (OQ-015..OQ-020) remain blocked.
+OQ-012 and OQ-013 are resolved (ADR-014, ADR-019, 22 Sep 2026): confirmed
+contributions post DR `1000` Cash / CR `3000` Share Capital and reversals
+post a compensating reversal. Registration-fee payments (OQ-014) and all
+loan, repayment, and payout rules (OQ-015..OQ-020) remain blocked.

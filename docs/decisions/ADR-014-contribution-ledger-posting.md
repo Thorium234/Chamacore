@@ -1,50 +1,48 @@
-# ADR-014: Contribution Posting to the Ledger (PROPOSED, BLOCKED)
+# ADR-014: Contribution Posting to the Ledger
 
 ## Status
 
-Proposed — blocked on open questions
+Approved 2026-09-22 (resolves OQ-013)
 
 ## Context
 
 V1 confirms a contribution by changing its status to `CONFIRMED` and creating
 a share record. V2 adds the ledger as the financial source of truth. When a
-contribution is confirmed, the approved V2 model should post it to the
-ledger. This ADR records the intended shape of that posting and why it cannot
-be implemented yet.
+contribution is confirmed, it is posted to the ledger.
 
-## Proposed decision
+## Decision
 
 When a contribution transitions from `PENDING` to `CONFIRMED`, the financial
 action during confirmation posts one balanced ledger transaction derived from
-the contribution.
+the contribution:
+
+- debit `1000` Cash (ASSET)
+- credit `3000` Share Capital (EQUITY)
+- for the full contribution amount
+
+The posting is idempotent: the ledger `source_type`/`source_id` uniqueness in
+ADR-012 is the backstop, using source type `CONTRIBUTION_CONFIRMATION` and
+source id `<contribution_id>`. A contribution can never create more than one
+posting, and every re-confirmation of an already-posted contribution is a
+no-op for the ledger.
 
 When a `CONFIRMED` contribution transitions to `REVERSED`, the financial
-action posts a compensating ledger transaction per ADR-011.
+action posts a compensating ledger transaction per ADR-011 (reversal reversing
+the contribution confirmation posting). Reversal is only possible if the
+posting exists.
 
-A contribution must never create more than one posting (the ledger
-`source_type`/`source_id` uniqueness in ADR-012 is the backstop).
-
-## Why it is blocked
-
-The actual accounts to be debited and credited, and how they are derived,
-are business rules that are not yet approved:
-
-- OQ-012 — how a Chama's chart of accounts is created and maintained.
-- OQ-013 — which accounts a confirmed contribution posts to (for example
-  which asset account receives the cash, and which equity/revenue account is
-  credited).
-
-Until OQ-012 and OQ-013 are decided, the contribution-confirmation service
-must not write to the ledger, because inventing the account mapping would
-invent a business rule.
+System-triggered postings (settlement of manually-confirmed contributions,
+see ADR-019) are performed as the seeded system user
+(`system@chamacore.invalid`), which cannot log in. `post_transaction` skips
+`authorize_chama_access` for non-user postings only; user-initiated postings
+are still authorization-checked per ADR-013.
 
 ## Consequences
 
-- The ledger migration, posting service, and ledger read endpoint are
-  delivered in this increment; connections from confirmed contributions are
-  not.
-- No V1 behavior changes: confirmation and reversal of contributions continue
-  to work exactly as in V1.
-- This ADR becomes approved and step 4 of the V2 implementation order
-  (connect confirmed contributions to the ledger) starts only after OQ-012
-  and OQ-013 are answered.
+- Confirmation and reversal of contributions write to the ledger exactly once.
+- The chart of accounts seeded at Chama creation (OQ-012 / ADR-019) supplies
+  the `1000`/`3000` accounts used here.
+- V1 behavior is unchanged except for the ledger write happening alongside
+  status change and share creation.
+- Authorization, precision, and audit rules in ADR-013 apply to the new
+  postings.

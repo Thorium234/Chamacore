@@ -44,6 +44,7 @@ from app.core.credential_cipher import CredentialCipher, CredentialCipherError
 from app.core.errors import ConflictError, RateLimitError, StateError
 from app.core.ratelimit import RateLimiter
 from app.models.enums import (
+    ContributionStatus,
     PaymentAttemptStatus,
     PaymentIntentStatus,
     PaymentTransferSource,
@@ -56,6 +57,7 @@ from app.models.user import User
 from app.providers import provider_registry
 from app.providers.base import ConnectionContext, PaymentAttemptRequest
 from app.providers.errors import ProviderIntegrationError, ProviderTimeoutError
+from app.repositories.contribution import ContributionRepository
 from app.repositories.payment import (
     PaymentAttemptRepository,
     PaymentConnectionRepository,
@@ -67,6 +69,7 @@ from app.services.access import (
     get_chama_or_404,
     get_target_membership,
 )
+from app.services.settlement import settle_linked_contribution
 
 # Provider failure codes that are permanent for a given credential/request and
 # therefore not retried. Everything else (e.g. PROVIDER_UNREACHABLE) is
@@ -124,6 +127,7 @@ class PaymentIntentService:
         currency: str,
         purpose: str,
         idempotency_key: str,
+        contribution_id: uuid.UUID | None = None,
     ) -> PaymentIntent:
         """Create a payment intent idempotently by ``(chama, idempotency_key)``."""
         chama = self._chama(actor, chama_id)
@@ -131,24 +135,29 @@ class PaymentIntentService:
         if target.status.value != "ACTIVE":
             raise StateError("Payments can only be collected from active members")
 
+        if contribution_id is not None:
+            self._validate_linked_contribution(target.id, contribution_id, amount)
+
         currency = currency.upper()
         payload_hash = canonical_payload_hash(
             membership_id=target.id,
             amount=f"{amount}",
             currency=currency,
             purpose=purpose,
+            contribution_id=str(contribution_id or ""),
         )
 
         existing = self._find_intent_by_key(chama.id, idempotency_key)
         if existing is not None:
             return self._match_idempotent_create(
-                existing, target.id, amount, currency, purpose, payload_hash
+                existing, target.id, amount, currency, purpose, payload_hash, contribution_id
             )
 
         intent = PaymentIntent(
             id=uuid.uuid4(),
             chama_id=chama.id,
             membership_id=target.id,
+            contribution_id=contribution_id,
             amount=amount,
             currency=currency,
             purpose=purpose,
@@ -167,11 +176,22 @@ class PaymentIntentService:
             existing = self._find_intent_by_key(chama.id, idempotency_key)
             if existing is not None:
                 return self._match_idempotent_create(
-                    existing, target.id, amount, currency, purpose, payload_hash
+                    existing, target.id, amount, currency, purpose, payload_hash, contribution_id
                 )
             raise
         self.db.refresh(intent)
         return intent
+
+    def _validate_linked_contribution(
+        self, membership_id: uuid.UUID, contribution_id: uuid.UUID, amount
+    ) -> None:
+        contribution = ContributionRepository(self.db).get_by_id(contribution_id)
+        if contribution is None or contribution.membership_id != membership_id:
+            raise StateError("The linked contribution does not exist for this membership")
+        if contribution.status != ContributionStatus.PENDING:
+            raise StateError("Only a PENDING contribution can be linked to a payment")
+        if amount != contribution.amount:
+            raise StateError("The payment amount must match the linked contribution")
 
     def _find_intent_by_key(self, chama_id: uuid.UUID, idempotency_key: str):
         return self.intents.get_by_idempotency_key(chama_id, idempotency_key)
@@ -184,6 +204,7 @@ class PaymentIntentService:
         currency: str,
         purpose: str,
         payload_hash: str,
+        contribution_id: uuid.UUID | None,
     ) -> PaymentIntent:
         if existing.idempotency_payload_hash != payload_hash:
             raise ConflictError(
@@ -196,6 +217,10 @@ class PaymentIntentService:
         if existing.amount != amount or existing.currency != currency or existing.purpose != purpose:
             raise ConflictError(
                 "This idempotency key was already used with a different amount, currency, or purpose"
+            )
+        if existing.contribution_id != contribution_id:
+            raise ConflictError(
+                "This idempotency key was already used with a different contribution"
             )
         return existing
 
@@ -538,6 +563,8 @@ class PaymentIntentService:
                 PaymentTransferSource.STATUS_QUERY,
                 None,
             )
+        if attempt.payment_intent.contribution_id is not None:
+            settle_linked_contribution(self.db, payment_intent=attempt.payment_intent)
         self.db.commit()
 
     def _resolve_attempt_failure(

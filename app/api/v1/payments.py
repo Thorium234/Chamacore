@@ -181,6 +181,7 @@ def create_payment_intent(
         currency=payload.currency,
         purpose=payload.purpose,
         idempotency_key=payload.idempotency_key,
+        contribution_id=payload.contribution_id,
     )
 
 

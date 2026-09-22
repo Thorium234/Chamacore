@@ -55,12 +55,27 @@ Decision: Outside development mode (`CHAMACORE_DEBUG=false`),
 `CHAMACORE_JWT_SECRET_KEY` must be set; the known default secret is rejected
 at configuration load.
 
-### OQ-012 through OQ-020: V2 financial core
+### OQ-012: Chama chart of accounts — creation and maintenance
 
-Decisions: See `docs/10_V2_FINANCIAL_CORE.md`. These remain open for V2
-(V2 ledger hardening is complete; chart-of-accounts seeding, contribution
-posting, registration fee payments, loan rules, and payout rules are still
-blocked).
+Decision (2026-09-22): On Chama creation, seed exactly three ledger accounts —
+`1000` Cash (ASSET), `3000` Share Capital (EQUITY), and `4000` Registration
+Fees (REVENUE) — idempotently per `(chama_id, code)`. Existing Chamas are
+backfilled by migration `f2b4d6a8e0c1`. Any further account creation remains a
+future business decision. See ADR-019.
+
+### OQ-013: Contribution posting accounts
+
+Decision (2026-09-22): Confirming a `PENDING` contribution posts one balanced
+ledger transaction — debit `1000` Cash, credit `3000` Share Capital, for the
+full amount — idempotent by `CONTRIBUTION_CONFIRMATION:<contribution_id>`.
+Reversing a `CONFIRMED` contribution posts a compensating reversal (ADR-011).
+See ADR-014 (now approved) and ADR-019.
+
+### OQ-014 through OQ-020: V2 loans and payouts
+
+Decisions: See `docs/10_V2_FINANCIAL_CORE.md`. Registration-fee payments
+(OQ-014) and all loan, repayment, and payout rules (OQ-015..OQ-020) remain
+open and blocked.
 
 ## Resolved (V3)
 
@@ -75,35 +90,16 @@ intent/attempt state machine, and a deduplicated, append-only webhook inbox.
 All decisions are recorded in the three ADRs above; no V3 payment open
 questions remain.
 
-Connecting confirmed contributions to the ledger (OQ-012/OQ-013) and loan,
-repayment, and payout flows (OQ-015..OQ-020) are still blocked by their
-respective V2 open questions and are not part of V3.
+Connecting confirmed contributions to the ledger (OQ-012/OQ-013, resolved
+above), registration-fee payments (OQ-014), and loan, repayment, and payout
+flows (OQ-015..OQ-020) are the remaining V2 work and are not part of V3.
+
+### OQ-021: C2B (Paybill) payment intake and STK settlement
+
+Decision (2026-09-22): ADR-019. See also OQ-012/OQ-013 above, which the
+decision builds on.
 
 ## Open (V2)
-
-### OQ-012: Chama chart of accounts — creation and maintenance
-
-**Question.** When a Chama is created, what accounts should its ledger
-receive, and how are accounts created/maintained afterwards?
-
-**Blocked work.** Seeding `ledger_accounts` at Chama creation; any default
-chart of accounts. The ledger tables and posting machinery exist, but no
-account records are created automatically.
-
-**Why it is open.** The composition of a chart of accounts is a business
-decision (which asset, liability, equity, revenue, and expense accounts a
-Chama needs), not an accounting-technical one that ChamaCore can derive.
-
-### OQ-013: Contribution posting accounts
-
-**Question.** When a confirmed contribution is posted to the ledger, which
-accounts are debited and credited?
-
-**Blocked work.** Step 4 of the V2 implementation order: connecting confirmed
-contributions to ledger entries. ADR-014 is proposed but on hold.
-
-**Why it is open.** Without a decision on the chart of accounts (OQ-012) and
-the account mapping for a contribution, posting would invent a business rule.
 
 ### OQ-014: Registration-fee payments and the ledger
 
@@ -159,30 +155,6 @@ ledger postings.
 ever reversible?
 
 **Blocked work.** Payout API and ledger posting.
-
-### OQ-021: C2B (Paybill) payment intake
-
-**Question.** `reports/Mpesa_Integration_Validation_Report.md` (approved
-`2026-09-17`) asks for the C2B API: a Validation URL, a Confirmation URL, and
-a Register-URL activation step. For manual M-Pesa Paybill payments, how is a
-payment matched to a Chama and member?
-
-- What does `BillRefNumber` encode, and how is it looked up (e.g. the
-  server-side membership number)? May one shortcode serve several Chamas, or
-  is every Chama's connection its own shortcode?
-- Which approval check runs at validation (must the member be ACTIVE? must
-  the Chama have an ACTIVE connection?)?
-
-**Blocked work.** C2B validation accept/reject logic, C2B confirmation
-processing, and the matching of a manual payment to a member. The
-confirmation's ledger credit also still depends on OQ-012/OQ-013 (posting
-accounts). The same blocker applies to the report's STK-callback step
-("settle the member contribution record"): callbacks currently only advance
-the payment attempt/intent state machines and never touch contribution/ledger
-records (ADR-018).
-
-**Why it is open.** No approved rule describes the payment-reference format,
-the member lookup, or the posting path.
 
 ## Guiding rule (AGENTS.md)
 

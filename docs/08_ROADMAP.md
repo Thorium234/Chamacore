@@ -21,13 +21,17 @@
 
 - Ledger (immutable double-entry, ADR-010..ADR-013) — foundation implemented
 - Financial transaction history — implemented
+- Chart of accounts seeding per Chama (OQ-012 / ADR-019) — implemented
+- Contribution posting and reversal (ADR-014) — implemented
+- C2B Paybill intake and contribution/STK settlement (ADR-019) — implemented
 - Loans
 - Loan repayments
 - Payouts
 
 Design and approved decisions: `docs/10_V2_FINANCIAL_CORE.md` and
-`docs/decisions/`. Loans, repayments, and payouts are blocked by open
-questions (OQ-015..OQ-020).
+`docs/decisions/`. OQ-012/OQ-013/OQ-021 are resolved (ADR-014, ADR-019).
+Registration-fee payments (OQ-014), loans, repayments, and payouts are blocked
+by open questions (OQ-014..OQ-020).
 
 ## V3 — Payment Architecture
 

@@ -60,6 +60,7 @@ class PaymentIntentCreate(BaseModel):
     currency: str = Field(default="KES", pattern=r"^[A-Z]{3}$")
     purpose: str = Field(min_length=1, max_length=255)
     idempotency_key: str = Field(min_length=1, max_length=255)
+    contribution_id: uuid.UUID | None = None
 
 
 class PaymentIntentInitiate(BaseModel):

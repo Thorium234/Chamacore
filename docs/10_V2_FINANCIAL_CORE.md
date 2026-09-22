@@ -1,6 +1,6 @@
 # V2 — Financial Core — Design
 
-Status: In progress. Version 2 (Financial Core) has started.
+Status: In progress. Version 2 (Financial Core) is underway.
 
 ## Goal
 
@@ -11,7 +11,8 @@ movement is represented as balanced ledger entries.
 
 ## Scope (this increment)
 
-This increment delivers the **ledger foundation** and **V2 hardening**:
+This increment delivers the **ledger foundation**, **V2 hardening**, and the
+**contribution ledger connection**:
 
 - The immutable double-entry ledger schema (ADR-010, ADR-011).
 - Ledger accounts with CHECK constraints (ADR-012).
@@ -21,10 +22,19 @@ This increment delivers the **ledger foundation** and **V2 hardening**:
 - V2 hardening (ADR-015): composite FKs, DB triggers, partial unique index,
   quantization-before-validation, idempotency conflict handling, reversal
   metadata validation, account-type and non-blank CHECK constraints.
+- The default chart of accounts seeded per Chama (OQ-012 / ADR-019):
+  `1000` Cash (ASSET), `3000` Share Capital (EQUITY), `4000` Registration Fees
+  (REVENUE), idempotent per `(chama_id, code)`; existing Chamas backfilled by
+  migration `f2b4d6a8e0c1`.
+- Contribution-to-ledger posting (ADR-014, approved `2026-09-22`) and
+  compensating reversal (ADR-011).
+- C2B Paybill intake, contribution settlement, and STK-push settlement
+  (ADR-019, resolves OQ-012/OQ-013/OQ-021).
 - Tests, migrations, and dev-DB verification for the ledger.
 
-Loans, repayments, and payouts are documented below but are **blocked** by
-open questions and are not implemented.
+Registration-fee payments (OQ-014), loans, repayments, and payouts
+(OQ-015..OQ-020) are documented below but are **blocked** by open questions
+and are not implemented.
 
 ## What a financial transaction is
 
@@ -65,13 +75,17 @@ Accounts are Chama-scoped and typed (ADR-012):
 
 Each entry carries either a debit or a credit amount. A transaction balances
 when total debits equal total credits. The default chart of accounts for a
-new Chama is unresolved (OQ-012).
+new Chama is seeded at creation (OQ-012 / ADR-019): `1000` Cash (ASSET),
+`3000` Share Capital (EQUITY), `4000` Registration Fees (REVENUE).
 
 ## How contributions post to the ledger
 
-Proposed but **blocked**: a confirmed contribution posts one balanced
-transaction; a reversed contribution posts a compensating transaction
-(ADR-014). The concrete account mapping needs decisions OQ-012 and OQ-013.
+Approved (ADR-014, `2026-09-22`): a confirmed contribution posts one balanced
+transaction debiting `1000` Cash and crediting `3000` Share Capital for the
+full amount, idempotent by `CONTRIBUTION_CONFIRMATION:<contribution_id>`.
+Reversing a confirmed contribution posts a compensating reversal (ADR-011).
+Settlement triggered by C2B confirmation or by a succeeded STK payment intent
+runs as the seeded system user (`system@chamacore.invalid`, cannot log in).
 
 ## How shares relate to ledger entries
 
@@ -80,15 +94,17 @@ amount (`amount / SHARE_UNIT_PRICE`, ADR-005). Shares are a unit ledger
 concept, not money movement.
 
 The question of whether share records should also be represented as ledger
-entries is part of the chart-of-accounts decision (OQ-012) and is not
-decided.
+entries is not decided (the OQ-012 decision seeds the three accounts above and
+does not address share-as-ledger representation).
 
-## Loans, repayments, and payouts
+## Registration fees, loans, repayments, and payouts
 
-All blocked. See open questions:
+Registration-fee payments (OQ-014) and loans, repayments, and payouts are
+blocked. See open questions:
 
 | Area | Open questions | Blocked work |
 | --- | --- | --- |
+| Registration-fee payments | OQ-014 | fee payment feature, ledger postings |
 | Loan eligibility | OQ-015 | loan creation |
 | Loan principal limits | OQ-016 | loan creation |
 | Interest / service charges | OQ-017 | repayment math, ledger postings |
@@ -100,9 +116,10 @@ All blocked. See open questions:
 ## Reversal and correction rules
 
 Approved at the ledger level (ADR-011): compensating transactions only. The
-business-level reversal rules (which events may reverse, and with what
-postings) are pending the ledger connection decision (ADR-014) and the open
-questions above.
+business-level reversal rules applied so far: reversing a confirmed
+contribution posts a compensating reversal of its confirmation posting
+(ADR-014). Reversal rules for registration-fee payments, loans, and payouts
+are pending their open questions (OQ-014..OQ-020).
 
 ## Idempotency requirements
 
@@ -217,13 +234,16 @@ No posting, reversal, or account-management endpoints are exposed publicly.
    constraints, partial unique index, cursor pagination, quantization-before-
    validation, idempotency conflict handling, reversal metadata validation.
    **— delivered** (reports/03_V2LedgerReviewReport.md, reports/04).
-5. Connect confirmed contributions to the ledger — **blocked** by OQ-012 /
-   OQ-013.
-6. Loans and repayments — **blocked** by OQ-015..OQ-018.
-7. Payouts — **blocked** by OQ-019 / OQ-020.
-8. General audit events for sensitive financial actions — later.
+5. Chart-of-accounts seeding per Chama (OQ-012 / ADR-019) — **delivered**.
+6. Connect confirmed contributions to the ledger (ADR-014, OQ-013) including
+   contribution settlement from C2B confirmation and succeeded STK payment
+   intents (ADR-019, OQ-021) — **delivered**.
+7. Loans and repayments — **blocked** by OQ-015..OQ-018.
+8. Payouts — **blocked** by OQ-019 / OQ-020.
+9. Registration-fee payments on the ledger — **blocked** by OQ-014.
+10. General audit events for sensitive financial actions — later.
 
 ## Explicitly marked unresolved
 
-Recorded in `docs/decisions/OPEN_QUESTIONS.md` (OQ-012..OQ-020). No
+Recorded in `docs/decisions/OPEN_QUESTIONS.md` (OQ-014..OQ-020). No
 unresolved business rule has been guessed.

@@ -7,7 +7,6 @@ import pytest
 from sqlalchemy import select
 
 from app.core.errors import ConflictError, StateError
-from app.models.enums import LedgerAccountType
 from app.models.ledger_account import LedgerAccount
 from app.models.ledger_transaction import LedgerTransaction
 from app.models.user import User
@@ -15,12 +14,12 @@ from app.services.ledger import REVERSAL_SOURCE_TYPE, LedgerLine, LedgerService
 from tests.conftest import create_chama, register_and_login
 
 
-def _add_account(db, chama_id: uuid.UUID, code: str, name: str, account_type: LedgerAccountType):
-    account = LedgerAccount(chama_id=chama_id, code=code, name=name, account_type=account_type)
-    db.add(account)
-    db.commit()
-    db.refresh(account)
-    return account
+def _account(db, chama_id: uuid.UUID, code: str) -> LedgerAccount:
+    return db.scalars(
+        select(LedgerAccount).where(
+            LedgerAccount.chama_id == chama_id, LedgerAccount.code == code
+        )
+    ).one()
 
 
 def _get_user(db, email: str) -> User:
@@ -45,9 +44,34 @@ def _setup(client, db, *, email="user@example.com", phone="+254700000001", govt=
     headers = register_and_login(client, email=email)
     chama = create_chama(client, headers, name="Ledger Chama", phone=phone, govt=govt)
     chama_id = uuid.UUID(chama["id"])
-    cash = _add_account(db, chama_id, "1000", "Cash", LedgerAccountType.ASSET)
-    equity = _add_account(db, chama_id, "3000", "Contribution Equity", LedgerAccountType.EQUITY)
+    cash = _account(db, chama_id, "1000")
+    equity = _account(db, chama_id, "3000")
     return headers, chama_id, cash, equity
+
+
+def test_create_chama_seeds_default_chart_of_accounts(client, db):
+    _, chama_id, _, _ = _setup(client, db)
+    codes = {
+        a.code
+        for a in db.scalars(
+            select(LedgerAccount).where(LedgerAccount.chama_id == chama_id)
+        )
+    }
+    assert {"1000", "3000", "4000"} <= codes
+
+
+def test_chart_of_accounts_seeding_is_idempotent(client, db):
+    _, chama_id, _, _ = _setup(client, db)
+    LedgerService(db).seed_default_chart_of_accounts(chama_id)
+    db.commit()
+    count = len(
+        list(
+            db.scalars(
+                select(LedgerAccount).where(LedgerAccount.chama_id == chama_id)
+            )
+        )
+    )
+    assert count == 3
 
 
 def test_post_balanced_transaction(client, db):

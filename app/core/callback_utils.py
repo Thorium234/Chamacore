@@ -49,11 +49,20 @@ def payload_hash(raw_payload: bytes) -> str:
     return hashlib.sha256(raw_payload).hexdigest()
 
 
-def canonical_payload_hash(*, membership_id: uuid.UUID, amount: str, currency: str, purpose: str) -> str:
+def canonical_payload_hash(
+    *,
+    membership_id: uuid.UUID,
+    amount: str,
+    currency: str,
+    purpose: str,
+    contribution_id: str | None = None,
+) -> str:
     """Hash of a client idempotency payload.
 
     Currency is upper-cased and the amount is passed as a canonical decimal
-    string so an identical business request always hashes identically.
+    string so an identical business request always hashes identically. The
+    optional ``contribution_id`` is part of the request so two requests that
+    agree on everything but the settled contribution are distinguishable.
     """
     canonical = json.dumps(
         {
@@ -61,6 +70,7 @@ def canonical_payload_hash(*, membership_id: uuid.UUID, amount: str, currency: s
             "amount": f"{amount}",
             "currency": currency.upper(),
             "purpose": purpose,
+            "contribution_id": contribution_id or "",
         },
         sort_keys=True,
         separators=(",", ":"),

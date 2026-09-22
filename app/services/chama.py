@@ -17,6 +17,7 @@ from app.repositories.registration_fee import RegistrationFeeRepository
 from app.repositories.role import RoleRepository
 from app.schemas.chama import ChamaCreate, ChamaUpdate, MemberDetails
 from app.services.access import authorize_chama_access, get_chama_or_404, require_role
+from app.services.ledger import LedgerService
 
 
 class ChamaService:
@@ -27,6 +28,7 @@ class ChamaService:
         self.memberships = MembershipRepository(db)
         self.roles = RoleRepository(db)
         self.fees = RegistrationFeeRepository(db)
+        self.ledger = LedgerService(db)
 
     def create_chama(self, *, user: User, data: ChamaCreate) -> Chama:
         member = self._resolve_creator_member(user, data)
@@ -52,6 +54,7 @@ class ChamaService:
             membership_id=creator_membership.id,
             amount=chama.registration_fee_amount,
         )
+        self.ledger.seed_default_chart_of_accounts(chama.id)
         self.db.commit()
         return chama
 

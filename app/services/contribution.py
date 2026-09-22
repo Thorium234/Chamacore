@@ -10,10 +10,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import ConflictError, NotFoundError, StateError
+from app.db.bootstrap import system_user_id
 from app.models.contribution import Contribution
 from app.models.enums import ContributionStatus, RoleName, ShareStatus
+from app.models.ledger_account import LedgerAccount
 from app.models.user import User
 from app.repositories.contribution import ContributionRepository
+from app.repositories.ledger import LedgerRepository
 from app.repositories.share import ShareRepository
 from app.schemas.membership import ContributionCreate
 from app.services.access import (
@@ -22,6 +25,13 @@ from app.services.access import (
     get_target_membership,
     require_roles,
 )
+from app.services.ledger import (
+    CASH_CODE,
+    CONTRIBUTION_SOURCE_TYPE,
+    SHARE_CAPITAL_CODE,
+    LedgerLine,
+    LedgerService,
+)
 
 
 class ContributionService:
@@ -29,6 +39,8 @@ class ContributionService:
         self.db = db
         self.contributions = ContributionRepository(db)
         self.shares = ShareRepository(db)
+        self.ledger = LedgerService(db)
+        self.ledger_repo = LedgerRepository(db)
 
     def record(self, *, actor: User, chama_id: uuid.UUID, data: ContributionCreate) -> Contribution:
         chama = get_chama_or_404(self.db, chama_id)
@@ -63,7 +75,20 @@ class ContributionService:
         actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
         require_roles(actor_membership, (RoleName.CHAIRPERSON,))
         contribution = self._get_chama_contribution(chama.id, contribution_id)
+        return self._settle(contribution, actor, allow_already_confirmed=False)
 
+    def _settle(self, contribution: Contribution, actor: User, *, allow_already_confirmed: bool) -> Contribution:
+        """Confirm a PENDING contribution and post its immutable ledger entry.
+
+        Used by the manual confirm endpoint (human actor) and by money-in
+        settlement (system user). OQ-013: each confirmed contribution posts a
+        single balanced transaction DR Cash / CR Share Capital, idempotent by
+        ``CONTRIBUTION_CONFIRMATION:<contribution_id>``.
+        """
+        if contribution.status == ContributionStatus.CONFIRMED:
+            if allow_already_confirmed:
+                return contribution
+            raise StateError("Only a PENDING contribution can be confirmed")
         if contribution.status != ContributionStatus.PENDING:
             raise StateError("Only a PENDING contribution can be confirmed")
 
@@ -75,8 +100,34 @@ class ContributionService:
             contribution_id=contribution.id,
             units=units,
         )
+        self._post_confirmation(contribution, actor)
         self.db.commit()
         return contribution
+
+    def _post_confirmation(self, contribution: Contribution, actor: User) -> None:
+        chama_id = contribution.membership.chama_id
+        self.ledger.post_transaction(
+            actor=actor,
+            chama_id=chama_id,
+            source_type=CONTRIBUTION_SOURCE_TYPE,
+            source_id=contribution.id,
+            description=f"Contribution {contribution.period} confirmation",
+            lines=[
+                LedgerLine(account_id=self._account_id(chama_id, CASH_CODE), debit=contribution.amount),
+                LedgerLine(account_id=self._account_id(chama_id, SHARE_CAPITAL_CODE), credit=contribution.amount),
+            ],
+            require_membership=actor.id != system_user_id(),
+        )
+
+    def _account_id(self, chama_id: uuid.UUID, code: str) -> uuid.UUID:
+        account = self.db.scalars(
+            select(LedgerAccount).where(
+                LedgerAccount.chama_id == chama_id, LedgerAccount.code == code
+            )
+        ).first()
+        if account is None:
+            raise StateError(f"The default ledger account {code} is missing for this Chama")
+        return account.id
 
     def reverse(
         self,
@@ -99,7 +150,16 @@ class ContributionService:
             contribution.note = note
         for share in contribution.shares:
             share.status = ShareStatus.REVERSED
-        self.db.commit()
+        posting = self.ledger_repo.get_by_source(CONTRIBUTION_SOURCE_TYPE, contribution.id)
+        if posting is not None:
+            self.ledger.reverse_transaction(
+                actor=actor,
+                chama_id=chama.id,
+                transaction_id=posting.id,
+                description=f"Contribution {contribution.period} reversal",
+            )
+        else:
+            self.db.commit()
         return contribution
 
     def list_by_chama(self, *, actor: User, chama_id: uuid.UUID) -> list[Contribution]:

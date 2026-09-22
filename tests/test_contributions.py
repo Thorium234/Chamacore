@@ -1,8 +1,17 @@
 """Contribution and share tests."""
 
-import pytest
+import uuid
 
+import pytest
+from sqlalchemy import select
+
+from app.models.ledger_transaction import LedgerTransaction
+from app.services.ledger import CONTRIBUTION_SOURCE_TYPE, REVERSAL_SOURCE_TYPE
 from tests.conftest import register_and_login, create_chama, add_membership
+
+
+def _ledger(db):
+    return list(db.scalars(select(LedgerTransaction).order_by(LedgerTransaction.created_at)))
 
 
 def _setup_contributing_chama(client):
@@ -117,7 +126,7 @@ class TestRecordContribution:
 
 
 class TestConfirmContribution:
-    def test_confirm_creates_shares(self, client):
+    def test_confirm_creates_shares_and_posts_ledger(self, client, db):
         headers, chama, m = _setup_contributing_chama(client)
         r = client.post(
             f"/api/v1/chamas/{chama['id']}/contributions",
@@ -138,6 +147,30 @@ class TestConfirmContribution:
         shares = r.json()
         assert len(shares) >= 1
         assert shares[0]["units"] == "30.0000"  # 3000 / 100
+        # OQ-013: one balanced posting, DR Cash / CR Share Capital
+        postings = [t for t in _ledger(db) if t.source_type == CONTRIBUTION_SOURCE_TYPE]
+        assert len(postings) == 1
+        assert postings[0].source_id == uuid.UUID(contrib_id)
+        posts = sum(e.debit for t in postings for e in t.entries)
+        credits = sum(e.credit for t in postings for e in t.entries)
+        assert posts == 3000 and credits == 3000
+
+    def test_reconfirm_is_idempotent_retry(self, client, db):
+        headers, chama, m = _setup_contributing_chama(client)
+        client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            json={"membership_id": m["id"], "amount": "1000.00", "period": "2026-09"},
+        )
+        contrib_id = client.get(
+            f"/api/v1/chamas/{chama['id']}/contributions", headers=headers
+        ).json()[0]["id"]
+        client.post(f"/api/v1/chamas/{chama['id']}/contributions/{contrib_id}/confirm", headers=headers)
+        second = client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions/{contrib_id}/confirm", headers=headers
+        )
+        assert second.status_code == 400
+        assert len(_ledger(db)) == 1
 
     def test_non_chairperson_cannot_confirm(self, client):
         headers_chair = register_and_login(client, "chair@e.com")
@@ -211,6 +244,31 @@ class TestReverseContribution:
             json={"membership_id": m["id"], "amount": "2000.00", "period": "2026-09"},
         )
         assert r.status_code == 201
+
+    def test_reverse_posts_compensating_ledger_reversal(self, client, db):
+        headers, chama, m = _setup_contributing_chama(client)
+        r = client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            json={"membership_id": m["id"], "amount": "5000.00", "period": "2026-09"},
+        )
+        contrib_id = r.json()["id"]
+        client.post(f"/api/v1/chamas/{chama['id']}/contributions/{contrib_id}/confirm", headers=headers)
+        r = client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions/{contrib_id}/reverse",
+            headers=headers,
+            json={"note": "Wrong amount"},
+        )
+        assert r.status_code == 200
+        txn = _ledger(db)
+        assert len(txn) == 2
+        posting, reversal = txn
+        assert posting.source_type == CONTRIBUTION_SOURCE_TYPE
+        assert reversal.source_type == REVERSAL_SOURCE_TYPE
+        assert reversal.reverses_transaction_id == posting.id
+        original = {(e.account_id, e.debit, e.credit) for e in posting.entries}
+        mirrored = {(e.account_id, e.credit, e.debit) for e in reversal.entries}
+        assert mirrored == original
 
     def test_pending_cannot_be_reversed(self, client):
         headers, chama, m = _setup_contributing_chama(client)

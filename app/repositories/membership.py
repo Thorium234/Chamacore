@@ -25,6 +25,13 @@ class MembershipRepository(BaseRepository):
         )
         return self.db.scalars(stmt).first()
 
+    def get_by_number(self, chama_id: uuid.UUID, membership_number: int) -> Membership | None:
+        stmt = select(Membership).where(
+            Membership.chama_id == chama_id,
+            Membership.membership_number == membership_number,
+        )
+        return self.db.scalars(stmt).first()
+
     def list_by_chama(self, chama_id: uuid.UUID) -> list[Membership]:
         stmt = (
             select(Membership)
