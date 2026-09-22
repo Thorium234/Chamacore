@@ -29,6 +29,7 @@ All `CHAMACORE_` variables are read from the environment or `.env`
 | `CHAMACORE_CREDENTIAL_ENCRYPTION_KEY_VERSION` | no | Rotates the active key (default `1`) |
 | `CHAMACORE_CREDENTIAL_ENCRYPTION_KEYS` | no | JSON map of older key versions for rotation |
 | `CHAMACORE_PUBLIC_BASE_URL` | yes | Public base URL for provider callbacks |
+| `CHAMACORE_CORS_ORIGINS` | yes | Comma-separated browser origins (explicit origins only — never `*`; credentials are allowed) |
 | `CHAMACORE_GENERAL_API_PER_MINUTE_LIMIT` | no | General API rate limit per client IP per minute (default 300) |
 | `CHAMACORE_AUTH_*_PER_MINUTE_LIMIT` | no | Auth endpoints limits (register/token/member-link) |
 | `CHAMACORE_PAYMENT_*_PER_MINUTE_LIMIT` | no | Payment validate/initiate/webhook limits |

@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: Compile check
         run: python -m compileall -q app alembic tests
       - name: Run Alembic migration (SQLite)
@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: Run Alembic migration
         run: alembic upgrade head
       - name: Run tests (PostgreSQL)
@@ -78,7 +78,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: Run Alembic migration
         run: alembic upgrade head
       - name: Run concurrency tests (PostgreSQL)

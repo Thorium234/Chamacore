@@ -5,6 +5,7 @@ import time
 import uuid
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -31,6 +32,20 @@ logger = logging.getLogger("app.request")
 
 def _request_client_host(request: Request) -> str:
     return request.client.host if request.client is not None else "unknown"
+
+
+# CORS for the browser frontend (report 2026-09-17, production readiness:
+# explicit origins, never "*"). Ajex web origins configuration is driven by
+# CHAMACORE_CORS_ORIGINS. Provider webhooks (Daraja STK/C2B) are server-to-
+# server and are not affected by browser same-origin policy.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", REQUEST_ID_HEADER],
+    expose_headers=[REQUEST_ID_HEADER],
+)
 
 
 @app.exception_handler(AppError)
