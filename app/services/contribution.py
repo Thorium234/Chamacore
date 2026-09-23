@@ -25,6 +25,7 @@ from app.services.access import (
     get_target_membership,
     require_roles,
 )
+from app.services.audit import AuditAction, AuditService
 from app.services.ledger import (
     CASH_CODE,
     CONTRIBUTION_SOURCE_TYPE,
@@ -41,6 +42,7 @@ class ContributionService:
         self.shares = ShareRepository(db)
         self.ledger = LedgerService(db)
         self.ledger_repo = LedgerRepository(db)
+        self.audit = AuditService(db)
 
     def record(self, *, actor: User, chama_id: uuid.UUID, data: ContributionCreate) -> Contribution:
         chama = get_chama_or_404(self.db, chama_id)
@@ -68,6 +70,14 @@ class ContributionService:
         except IntegrityError as exc:
             self.db.rollback()
             raise ConflictError("Duplicate contribution for this membership and period") from exc
+        self.audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.CONTRIBUTION_CREATE,
+            resource_type="contribution",
+            resource_id=contribution.id,
+            payload={"amount": str(contribution.amount), "period": contribution.period},
+        )
         return contribution
 
     def confirm(self, *, actor: User, chama_id: uuid.UUID, contribution_id: uuid.UUID) -> Contribution:
@@ -102,6 +112,14 @@ class ContributionService:
         )
         self._post_confirmation(contribution, actor)
         self.db.commit()
+        self.audit.record_commit(
+            actor=actor,
+            chama_id=contribution.membership.chama_id,
+            action=AuditAction.CONTRIBUTION_CONFIRM,
+            resource_type="contribution",
+            resource_id=contribution.id,
+            payload={"amount": str(contribution.amount), "period": contribution.period},
+        )
         return contribution
 
     def _post_confirmation(self, contribution: Contribution, actor: User) -> None:
@@ -160,6 +178,14 @@ class ContributionService:
             )
         else:
             self.db.commit()
+        self.audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.CONTRIBUTION_REVERSE,
+            resource_type="contribution",
+            resource_id=contribution.id,
+            payload={"amount": str(contribution.amount), "period": contribution.period},
+        )
         return contribution
 
     def list_by_chama(self, *, actor: User, chama_id: uuid.UUID) -> list[Contribution]:

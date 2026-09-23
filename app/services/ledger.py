@@ -20,16 +20,24 @@ from app.services.access import authorize_chama_access, get_chama_or_404
 
 REVERSAL_SOURCE_TYPE = "LEDGER_REVERSAL"
 CONTRIBUTION_SOURCE_TYPE = "CONTRIBUTION_CONFIRMATION"
+LOAN_DISBURSEMENT_SOURCE_TYPE = "LOAN_DISBURSEMENT"
+LOAN_REPAYMENT_SOURCE_TYPE = "LOAN_REPAYMENT"
+PAYOUT_COMPLETION_SOURCE_TYPE = "PAYOUT_COMPLETION"
+REGISTRATION_FEE_PAYMENT_SOURCE_TYPE = "REGISTRATION_FEE_PAYMENT"
 CENT = Decimal("0.01")
 
 CASH_CODE = "1000"
 SHARE_CAPITAL_CODE = "3000"
 REGISTRATION_FEES_CODE = "4000"
+LOANS_RECEIVABLE_CODE = "1100"
+INTEREST_INCOME_CODE = "5000"
 
 CHART_ACCOUNTS = (
     (CASH_CODE, "Cash", LedgerAccountType.ASSET, "Money held for the Chama"),
+    (LOANS_RECEIVABLE_CODE, "Loans Receivable", LedgerAccountType.ASSET, "Outstanding loan principal owed by members (ADR-020)"),
     (SHARE_CAPITAL_CODE, "Share Capital", LedgerAccountType.EQUITY, "Member contributions recorded as share capital"),
     (REGISTRATION_FEES_CODE, "Registration Fees", LedgerAccountType.REVENUE, "Income from member registration fees"),
+    (INTEREST_INCOME_CODE, "Interest Income", LedgerAccountType.REVENUE, "Service interest earned on member loans (ADR-020)"),
 )
 
 

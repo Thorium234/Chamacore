@@ -51,6 +51,7 @@ from app.services.access import (
     get_chama_or_404,
     require_role,
 )
+from app.services.audit import AuditAction, AuditService
 
 _validate_limiter = RateLimiter(get_settings().payment_validate_per_minute_limit, 60.0)
 _c2b_register_limiter = RateLimiter(get_settings().payment_validate_per_minute_limit, 60.0)
@@ -61,6 +62,7 @@ class PaymentConnectionService:
         self.db = db
         self.connections = PaymentConnectionRepository(db)
         self.cipher = CredentialCipher()
+        self.business_audit = AuditService(db)
 
     def _chairperson_chama(self, actor: User, chama_id: uuid.UUID):
         chama = get_chama_or_404(self.db, chama_id)
@@ -144,6 +146,14 @@ class PaymentConnectionService:
                 "This Chama already has a connection for this provider and environment"
             )
         self.db.refresh(connection)
+        self.business_audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.PAYMENT_CONNECTION_CREATED,
+            resource_type="payment_connection",
+            resource_id=connection.id,
+            payload={"provider": connection.provider_code.value, "environment": connection.environment.value},
+        )
         return connection
 
     def list(self, *, actor: User, chama_id: uuid.UUID) -> list[PaymentConnection]:
@@ -199,6 +209,14 @@ class PaymentConnectionService:
         )
         self.db.commit()
         self.db.refresh(connection)
+        self.business_audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.PAYMENT_CONNECTION_CREDENTIALS_REPLACED,
+            resource_type="payment_connection",
+            resource_id=connection.id,
+            payload={"credential_version": connection.credential_version},
+        )
         return connection
 
     def validate(
@@ -251,6 +269,14 @@ class PaymentConnectionService:
             )
             self.db.commit()
             self.db.refresh(connection)
+            self.business_audit.record_commit(
+                actor=actor,
+                chama_id=chama.id,
+                action=AuditAction.PAYMENT_CONNECTION_VALIDATED,
+                resource_type="payment_connection",
+                resource_id=connection.id,
+                payload={"status": connection.status.value},
+            )
             return connection
 
         if result.valid:
@@ -285,6 +311,22 @@ class PaymentConnectionService:
         )
         self.db.commit()
         self.db.refresh(connection)
+        self.business_audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.PAYMENT_CONNECTION_VALIDATED,
+            resource_type="payment_connection",
+            resource_id=connection.id,
+            payload={"status": connection.status.value},
+        )
+        if connection.status == PaymentConnectionStatus.ACTIVE and not was_disabled:
+            self.business_audit.record_commit(
+                actor=actor,
+                chama_id=chama.id,
+                action=AuditAction.PAYMENT_CONNECTION_ENABLED,
+                resource_type="payment_connection",
+                resource_id=connection.id,
+            )
         return connection
 
     def register_c2b_urls(
@@ -353,6 +395,14 @@ class PaymentConnectionService:
                 "the shortcode still answers the old URLs"
             ) from exc
 
+        self.business_audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.C2B_REGISTRATION,
+            resource_type="payment_connection",
+            resource_id=connection.id,
+            payload={"accepted": result.accepted},
+        )
         return C2BRegisterUrlOut(
             accepted=result.accepted,
             response_code=result.response_code or "",
@@ -385,6 +435,14 @@ class PaymentConnectionService:
         )
         self.db.commit()
         self.db.refresh(connection)
+        self.business_audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.PAYMENT_CONNECTION_DISABLED,
+            resource_type="payment_connection",
+            resource_id=connection.id,
+            payload={"previous_status": previous_status.value},
+        )
         return connection
 
     def delete(

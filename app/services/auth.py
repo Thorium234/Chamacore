@@ -17,6 +17,7 @@ from app.models.user import User
 from app.repositories.member import MemberRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.user import UserRepository
+from app.services.audit import AuditAction, AuditService
 
 
 def _as_aware(value: datetime) -> datetime:
@@ -36,12 +37,20 @@ class AuthService:
         self.users = UserRepository(db)
         self.members = MemberRepository(db)
         self.refresh_tokens = RefreshTokenRepository(db)
+        self.audit = AuditService(db)
 
     def register(self, *, email: str, password: str) -> User:
         if self.users.get_by_email(email) is not None:
             raise ConflictError("An account with this email already exists")
         user = self.users.create(email=email, password_hash=hash_password(password))
         self.db.commit()
+        self.audit.record_commit(
+            actor=user,
+            chama_id=None,
+            action=AuditAction.AUTH_REGISTER,
+            resource_type="user",
+            resource_id=user.id,
+        )
         return user
 
     def authenticate(self, *, email: str, password: str) -> User | None:
@@ -64,6 +73,13 @@ class AuthService:
             raise ConflictError("This member identity is already linked to another account")
         user.member_id = member.id
         self.db.commit()
+        self.audit.record_commit(
+            actor=user,
+            chama_id=None,
+            action=AuditAction.AUTH_MEMBER_LINK,
+            resource_type="user",
+            resource_id=user.id,
+        )
         return user
 
     def issue_token(self, user: User) -> str:
@@ -110,6 +126,13 @@ class AuthService:
             expires_at=now + timedelta(days=settings.refresh_token_expires_days),
         )
         self.db.commit()
+        self.audit.record_commit(
+            actor=user,
+            chama_id=None,
+            action=AuditAction.AUTH_REFRESH,
+            resource_type="user",
+            resource_id=user.id,
+        )
         return {"access_token": self.issue_token(user), "refresh_token": new_refresh}
 
     def revoke_refresh_token(self, *, refresh_token: str) -> None:

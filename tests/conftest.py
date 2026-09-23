@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.api.deps import oauth2_scheme, reset_rate_limiters
 from app.core.metrics import reset_metrics
+from app.db.audit_guards import create_audit_guards
 from app.db.base import Base
 from app.db.bootstrap import ensure_system_user
 from app.db.ledger_guards import create_ledger_guards
@@ -56,6 +57,7 @@ def db(tmp_path):
         Base.metadata.create_all(engine)
         with engine.begin() as conn:
             create_ledger_guards(conn)
+            create_audit_guards(conn)
         session_factory = sessionmaker(bind=engine, expire_on_commit=False)
         session = session_factory()
         _seed_roles(session)
@@ -76,6 +78,7 @@ def db(tmp_path):
         Base.metadata.create_all(engine)
         with engine.begin() as conn:
             create_ledger_guards(conn)
+            create_audit_guards(conn)
         session_factory = sessionmaker(bind=engine, expire_on_commit=False)
         session = session_factory()
         _seed_roles(session)

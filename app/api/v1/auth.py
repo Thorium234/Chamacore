@@ -15,6 +15,7 @@ from app.core.errors import StateError
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import LogoutRequest, MemberLinkRequest, RefreshRequest, RegisterRequest, TokenOut, UserOut
+from app.services.audit import AuditAction, AuditService
 from app.services.auth import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -38,12 +39,26 @@ def login(
     service = AuthService(db)
     user = service.authenticate(email=form_data.username, password=form_data.password)
     if user is None:
+        AuditService(db).record_commit(
+            actor=None,
+            chama_id=None,
+            action=AuditAction.AUTH_LOGIN_FAILED,
+            resource_type="user",
+            success=False,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     session = service.create_auth_session(user)
+    AuditService(db).record_commit(
+        actor=user,
+        chama_id=None,
+        action=AuditAction.AUTH_LOGIN,
+        resource_type="user",
+        resource_id=user.id,
+    )
     return _to_token_out(session)
 
 
@@ -71,6 +86,12 @@ def logout(
     _rate_limit: None = Depends(check_token_rate_limit),
 ) -> Response:
     AuthService(db).revoke_refresh_token(refresh_token=data.refresh_token)
+    AuditService(db).record_commit(
+        actor=None,
+        chama_id=None,
+        action=AuditAction.AUTH_LOGOUT,
+        resource_type="refresh_token",
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

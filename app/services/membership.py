@@ -24,6 +24,7 @@ from app.services.access import (
     get_target_membership,
     require_roles,
 )
+from app.services.audit import AuditAction, AuditService
 
 MAX_NUMBER_RETRIES = 5
 
@@ -57,6 +58,7 @@ class MembershipService:
         self.memberships = MembershipRepository(db)
         self.roles = RoleRepository(db)
         self.fees = RegistrationFeeRepository(db)
+        self.audit = AuditService(db)
 
     def list_by_chama(self, *, actor: User, chama_id: uuid.UUID) -> list[Membership]:
         chama = get_chama_or_404(self.db, chama_id)
@@ -70,7 +72,15 @@ class MembershipService:
 
         for attempt in range(MAX_NUMBER_RETRIES):
             try:
-                return self._create_membership_once(chama.id, data)
+                membership = self._create_membership_once(chama.id, data)
+                self.audit.record_commit(
+                    actor=actor,
+                    chama_id=chama.id,
+                    action=AuditAction.MEMBERSHIP_CREATE,
+                    resource_type="membership",
+                    resource_id=membership.id,
+                )
+                return membership
             except IntegrityError as exc:
                 constraint = classify_integrity_error(exc)
                 self.db.rollback()
@@ -113,8 +123,17 @@ class MembershipService:
         actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama_id)
         require_roles(actor_membership, (RoleName.CHAIRPERSON,))
         membership = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
+        previous = membership.status.value
         membership.status = status
         self.db.commit()
+        self.audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.MEMBERSHIP_STATUS_CHANGE,
+            resource_type="membership",
+            resource_id=membership.id,
+            payload={"from": previous, "to": status.value},
+        )
         return membership
 
     def _create_member(self, details: MemberDetails):

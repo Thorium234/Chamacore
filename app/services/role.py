@@ -19,6 +19,7 @@ from app.services.access import (
     get_target_membership,
     require_role,
 )
+from app.services.audit import AuditAction, AuditService
 
 
 class RoleService:
@@ -26,6 +27,7 @@ class RoleService:
         self.db = db
         self.memberships = MembershipRepository(db)
         self.roles = RoleRepository(db)
+        self.audit = AuditService(db)
 
     def list_chama_roles(self, *, actor: User, chama_id: uuid.UUID) -> list[Role]:
         chama = get_chama_or_404(self.db, chama_id)
@@ -57,6 +59,14 @@ class RoleService:
             self.db.rollback()
             raise ConflictError("Role is already assigned to this membership") from exc
         self.db.expire(target)
+        self.audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.ROLE_ASSIGN,
+            resource_type="membership",
+            resource_id=target.id,
+            payload={"role": role.value},
+        )
         return target
 
     def remove_role(
@@ -76,6 +86,14 @@ class RoleService:
             raise StateError("This membership does not hold the requested role")
         self.db.commit()
         self.db.expire(target)
+        self.audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.ROLE_REMOVE,
+            resource_type="membership",
+            resource_id=target.id,
+            payload={"role": role.value},
+        )
         return target
 
     def _has_chairperson(self, chama_id: uuid.UUID, *, exclude: uuid.UUID) -> bool:

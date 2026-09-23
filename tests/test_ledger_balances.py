@@ -57,10 +57,12 @@ def test_account_balances_computed_from_entries(client, db):
     r = client.get(f"/api/v1/chamas/{chama_id}/ledger/accounts", headers=headers)
     assert r.status_code == 200
     by_code = {item["code"]: item for item in r.json()["items"]}
-    assert set(by_code) == {"1000", "3000", "4000"}
+    assert set(by_code) == {"1000", "3000", "4000", "1100", "5000"}
     assert by_code["1000"]["balance"] == "150.00"
     assert by_code["3000"]["balance"] == "-150.00"
     assert by_code["4000"]["balance"] == "0.00"
+    assert by_code["1100"]["balance"] == "0.00"
+    assert by_code["5000"]["balance"] == "0.00"
     assert isinstance(by_code["1000"]["balance"], str)
 
 

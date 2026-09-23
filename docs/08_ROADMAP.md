@@ -51,25 +51,29 @@ Sections below use the status labels `COMPLETED`, `CURRENT`, `NEXT`,
 
 ## CURRENT
 
-Step 1 (repository consistency) and Step 2 (deferred-test inventory) of the
-scale report are complete as of `2026-09-23`. No feature code is in progress.
+Phases 2–4 and 6 of the scale-report backend completion spec (loans, loan
+repayments, payouts, registration-fee settlement, and the append-only
+business audit event system) are implemented as of `2026-09-23` following
+D-01..D-08 recorded in ADR-020..023. Next: finalize documentation updates and
+mark completed items.
 
 ## NEXT (decision-blocked)
 
-Steps 4–9 of the scale report cannot start until their open questions are
-answered in `docs/decisions/OPEN_QUESTIONS.md`. Do not guess them.
+Steps 4–9 of the scale report remaining (financial reporting beyond existing
+ledger balances/entries; notifications; reconciliation; security hardening;
+integration testing; performance measurement) remain decision-blocked except
+those implemented above. The items below remain blocked pending their recorded
+decisions:
 
 | Area | Blocked by | Status |
 | --- | --- | --- |
-| Registration-fee ledger payments | OQ-014 | blocked |
-| Loans | OQ-015..OQ-018 | blocked |
-| Loan repayments | OQ-015..OQ-018 | blocked |
-| Payouts | OQ-019 / OQ-020 | blocked |
-| Financial reporting beyond existing balances/entries | report definitions | blocked |
-| Business audit events | which sensitive actions to record | blocked |
+| Financial reporting beyond existing balances/entries | report definitions (D-07) | blocked |
+| Business audit events | covered (D-08/ADR-023) | completed |
+| Notifications | D-09 | blocked |
+| Bank reconciliation | D-10 | blocked |
+| Security hardening, integration testing, performance measurement | scale-report steps 10–12 | not started |
 
-When a decision is recorded, it must land as an ADR in `docs/decisions/` and
-the corresponding scale-report step becomes the current work.
+OQ-014..OQ-020 are resolved by ADR-020..023.
 
 ## DEFERRED
 

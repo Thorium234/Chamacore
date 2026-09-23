@@ -13,6 +13,7 @@ from app.models.enums import RegistrationFeeStatus
 
 if TYPE_CHECKING:
     from app.models.membership import Membership
+    from app.models.registration_fee_payment import RegistrationFeePayment
 
 
 class RegistrationFee(Base, UUIDMixin, TimestampMixin):
@@ -29,6 +30,7 @@ class RegistrationFee(Base, UUIDMixin, TimestampMixin):
     )
 
     membership: Mapped["Membership"] = relationship(back_populates="registration_fee")
+    payments: Mapped[list["RegistrationFeePayment"]] = relationship(back_populates="fee")
 
     __table_args__ = (
         CheckConstraint("amount >= 0", name="ck_registration_fees_amount_non_negative"),

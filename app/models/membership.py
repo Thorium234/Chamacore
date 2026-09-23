@@ -14,8 +14,11 @@ from app.models.enums import MembershipStatus, RoleName
 if TYPE_CHECKING:
     from app.models.chama import Chama
     from app.models.contribution import Contribution
+    from app.models.loan import Loan
     from app.models.member import Member
+    from app.models.payout import Payout
     from app.models.registration_fee import RegistrationFee
+    from app.models.registration_fee_payment import RegistrationFeePayment
     from app.models.share import Share
 
 
@@ -46,10 +49,18 @@ class Membership(Base, UUIDMixin, TimestampMixin):
         back_populates="membership", lazy="selectin"
     )
     shares: Mapped[list["Share"]] = relationship(back_populates="membership", lazy="selectin")
+    loans: Mapped[list["Loan"]] = relationship(back_populates="membership", lazy="selectin")
+    payouts: Mapped[list["Payout"]] = relationship(back_populates="membership", lazy="selectin")
+    registration_fee_payments: Mapped[list["RegistrationFeePayment"]] = relationship(
+        back_populates="membership", lazy="selectin"
+    )
 
     __table_args__ = (
         UniqueConstraint("chama_id", "member_id", name="uq_memberships_chama_member"),
         UniqueConstraint("chama_id", "membership_number", name="uq_memberships_chama_number"),
+        # Composite (chama_id, id) unique target for financial tables that
+        # enforce Chama ownership of memberships at the database level.
+        UniqueConstraint("chama_id", "id", name="uq_memberships_chama_id"),
     )
 
     def has_role(self, role_name: RoleName) -> bool:

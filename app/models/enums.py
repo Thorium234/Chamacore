@@ -16,6 +16,38 @@ class MembershipStatus(StrEnum):
 class RegistrationFeeStatus(StrEnum):
     OWED = "OWED"
     WAIVED = "WAIVED"
+    PAID = "PAID"
+
+
+class RegistrationFeePaymentStatus(StrEnum):
+    CONFIRMED = "CONFIRMED"
+    REVERSED = "REVERSED"
+
+
+class LoanStatus(StrEnum):
+    DRAFT = "DRAFT"
+    SUBMITTED = "SUBMITTED"
+    APPROVED = "APPROVED"
+    DISBURSED = "DISBURSED"
+    PARTIALLY_REPAID = "PARTIALLY_REPAID"
+    REPAID = "REPAID"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+
+
+class LoanRepaymentStatus(StrEnum):
+    CONFIRMED = "CONFIRMED"
+    REVERSED = "REVERSED"
+
+
+class PayoutStatus(StrEnum):
+    REQUESTED = "REQUESTED"
+    APPROVED = "APPROVED"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    REJECTED = "REJECTED"
+    FAILED = "FAILED"
+    REVERSED = "REVERSED"
 
 
 class ContributionStatus(StrEnum):

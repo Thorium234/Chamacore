@@ -57,7 +57,7 @@ def test_create_chama_seeds_default_chart_of_accounts(client, db):
             select(LedgerAccount).where(LedgerAccount.chama_id == chama_id)
         )
     }
-    assert {"1000", "3000", "4000"} <= codes
+    assert {"1000", "3000", "4000", "1100", "5000"} <= codes
 
 
 def test_chart_of_accounts_seeding_is_idempotent(client, db):
@@ -71,7 +71,7 @@ def test_chart_of_accounts_seeding_is_idempotent(client, db):
             )
         )
     )
-    assert count == 3
+    assert count == 5
 
 
 def test_post_balanced_transaction(client, db):

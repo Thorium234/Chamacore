@@ -17,6 +17,7 @@ from app.repositories.registration_fee import RegistrationFeeRepository
 from app.repositories.role import RoleRepository
 from app.schemas.chama import ChamaCreate, ChamaUpdate, MemberDetails
 from app.services.access import authorize_chama_access, get_chama_or_404, require_role
+from app.services.audit import AuditAction, AuditService
 from app.services.ledger import LedgerService
 
 
@@ -29,6 +30,7 @@ class ChamaService:
         self.roles = RoleRepository(db)
         self.fees = RegistrationFeeRepository(db)
         self.ledger = LedgerService(db)
+        self.audit = AuditService(db)
 
     def create_chama(self, *, user: User, data: ChamaCreate) -> Chama:
         member = self._resolve_creator_member(user, data)
@@ -56,6 +58,14 @@ class ChamaService:
         )
         self.ledger.seed_default_chart_of_accounts(chama.id)
         self.db.commit()
+        self.audit.record_commit(
+            actor=user,
+            chama_id=chama.id,
+            action=AuditAction.CHAMA_CREATE,
+            resource_type="chama",
+            resource_id=chama.id,
+            payload={"name": chama.name},
+        )
         return chama
 
     def get_chama(self, *, actor: User, chama_id: uuid.UUID) -> Chama:
@@ -76,6 +86,29 @@ class ChamaService:
         if data.status is not None:
             chama.status = data.status
         self.db.commit()
+        self.audit.record_commit(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.CHAMA_UPDATE,
+            resource_type="chama",
+            resource_id=chama.id,
+            payload={
+                "name": data.name,
+                "description": data.description,
+                "registration_fee_amount": str(data.registration_fee_amount)
+                if data.registration_fee_amount is not None
+                else None,
+            },
+        )
+        if data.status is not None:
+            self.audit.record_commit(
+                actor=actor,
+                chama_id=chama.id,
+                action=AuditAction.CHAMA_STATUS_CHANGE,
+                resource_type="chama",
+                resource_id=chama.id,
+                payload={"status": chama.status.value},
+            )
         return chama
 
     def _resolve_creator_member(self, user: User, data: ChamaCreate):
