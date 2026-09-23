@@ -1,6 +1,8 @@
 # V2 — Financial Core — Design
 
-Status: In progress. Version 2 (Financial Core) is underway.
+Status: Delivered for the non-decision-blocked scope (ADR-010..ADR-015 and the
+approved parts of ADR-019). Registration-fee payments, loans, loan repayments,
+and payouts remain blocked by open questions.
 
 ## Goal
 
@@ -219,8 +221,19 @@ composite foreign keys are database-level backstops for the service rules.
 | Method | Path | Authorization | Status |
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/chamas/{chama_id}/ledger?limit=1..100&cursor=` | active member | implemented |
+| `GET` | `/api/v1/chamas/{chama_id}/ledger/accounts` | active member | implemented |
+| `GET` | `/api/v1/chamas/{chama_id}/ledger/accounts/{account_id}/entries?limit&cursor=` | active member | implemented |
 
-Returns `LedgerHistoryOut` with `items` (list of `LedgerTransactionOut`), `next_cursor` (nullable base64 cursor), and `has_more` (bool). Cursor pagination is keyset-based on `(created_at DESC, id DESC)`.
+`GET .../ledger` returns `LedgerHistoryOut` with `items` (list of
+`LedgerTransactionOut`), `next_cursor` (nullable base64 cursor), and
+`has_more` (bool). Cursor pagination is keyset-based on
+`(created_at DESC, id DESC)`.
+
+`GET .../ledger/accounts` returns `LedgerAccountsOut` with each account and a
+signed balance computed from posted entries (`sum(debit) - sum(credit)`,
+quantized, `SignedMoney`). `GET .../ledger/accounts/{account_id}/entries`
+returns `LedgerAccountEntriesOut` with the account, its balance, and its
+entries cursor-paginated.
 
 No posting, reversal, or account-management endpoints are exposed publicly.
 

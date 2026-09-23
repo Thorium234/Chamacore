@@ -37,7 +37,9 @@ A `ProviderRegistry` keyed by `(provider_code, environment)` ensures sandbox
 connections can never reach production endpoints.
 
 Adapters are independently testable via `httpx.MockTransport` without
-touching a live provider API (53 contract tests).
+touching a live provider API: 35 active Daraja contract tests in
+`test_provider_adapters.py`, plus 27 deferred Jenga contract tests (see
+`docs/13_TEST_INVENTORY.md`).
 
 ### Documented limitations
 
@@ -144,22 +146,27 @@ drift. PostgreSQL trigger and concurrency paths are covered by CI.
 
 ## Test coverage
 
-| Test file | Count | Scope |
-| --- | --- | --- |
-| `test_provider_adapters.py` | 53 | Adapter contract tests with MockTransport |
-| `test_credential_cipher.py` | 15 | AES-GCM round-trip, key rotation, tampering |
-| `test_payment_connections.py` | 22 | Connection lifecycle, auth, validation |
-| `test_payment_intents.py` | 16 | Intent creation, initiation, retry, timeout |
-| `test_payment_webhooks.py` | 11 | Callback inbox, dedup, disagreement, binding |
+| Test file | Scope |
+| --- | --- |
+| `test_provider_adapters.py` | Adapter contract tests with MockTransport (Daraja active; Jenga deferred) |
+| `test_credential_cipher.py` | AES-GCM round-trip, key rotation, tampering |
+| `test_payment_connections.py` | Connection lifecycle, auth, validation |
+| `test_payment_intents.py` | Intent creation, initiation, retry, timeout |
+| `test_payment_webhooks.py` | Callback inbox, dedup, disagreement, binding |
+| `test_c2b_payments.py` | C2B validation/confirmation, duplicate + disagreement, settlement idempotency |
+| `test_payment_settlement.py` | Confirmation → contribution → ledger posting as the system user |
 
-All 224 non-concurrency tests pass on SQLite. PostgreSQL concurrency tests
-are run by CI.
+For overall test counts (collected / active / deferred) see
+`docs/13_TEST_INVENTORY.md`. SQLite runs locally; native PostgreSQL
+concurrency and trigger paths are run by CI.
 
 ## Not implemented
 
-- Jenga Daraja live provider integration tests (requires test credentials
-  and sandbox accounts).
-- Payment confirmations connected to the ledger (blocked by OQ-012/OQ-013).
+- Live provider sandbox integration tests (requires test credentials and
+  sandbox accounts) — deferred, see `docs/13_TEST_INVENTORY.md`.
+- Jenga as an active provider (adapter code retained but unregistered;
+  `JENGA` enum kept for rollback) — deferred, see
+  `docs/13_TEST_INVENTORY.md`.
 - Loan, repayment, and payout flows (blocked by OQ-015..OQ-020).
 - Bank reconciliation, notifications, background workers.
 - React, React Native, USSD.

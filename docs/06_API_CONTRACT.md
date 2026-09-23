@@ -1,4 +1,4 @@
-# V1 API Contract
+# ChamaCore API Contract
 
 ## Status labels
 
@@ -12,8 +12,9 @@
 
 Status: `IMPLEMENTED`
 
-Returns a landing payload with the service name, version, and API docs
-path: `{"service": "ChamaCore", "version": "1.0.0", "docs": "/docs"}`.
+Returns a landing payload with the service name, version, and API docs path:
+`{"service": "ChamaCore", "version": "1.0.0", "docs": "/docs"}`. In production
+builds (`CHAMACORE_DEBUG=false`) the `docs` key is omitted.
 
 ## Health and Readiness
 
@@ -35,8 +36,12 @@ Status: `IMPLEMENTED`
 
 Returns a Prometheus text exposition of process-level HTTP metrics
 (`chamacore_http_requests_total`, `chamacore_http_request_duration_seconds_*`)
-with bounded route-template labels. No authentication; intended for an
-internal monitoring scraper only.
+with bounded route-template labels. In production
+(`CHAMACORE_DEBUG=false`) the endpoint requires the `X-Metrics-Token` header
+matching `CHAMACORE_METRICS_TOKEN`; without a matching token it returns 404.
+If `CHAMACORE_METRICS_TOKEN` is unset the endpoint returns 404 so the scrape
+path is never public. Debug builds leave it open. Intended for an internal
+monitoring scraper only.
 
 ## Request correlation
 
@@ -58,7 +63,29 @@ Returns 201 with the user (without password hash). Returns 409 on duplicate emai
 Status: `IMPLEMENTED`
 
 OAuth2 password grant. Body: `username`, `password` as form fields.
-Returns 200 with `{"access_token": "...", "token_type": "bearer"}`. Returns 401 on failure.
+Returns 200 with `{"access_token": "...", "refresh_token": "...", "token_type":
+"bearer", "expires_in": 7200}`. `expires_in` seconds equals
+`CHAMACORE_JWT_EXPIRES_MINUTES` (default 120). Returns 401 on failure. The
+system posting account (`system@chamacore.invalid`) always fails login.
+
+### `POST /api/v1/auth/refresh`
+
+Status: `IMPLEMENTED`
+
+Exchanges an unused, unexpired refresh token for a fresh access token **and**
+a rotated refresh token (the presented token is revoked). Body:
+`{"refresh_token": "..."}`. Returns 200 with the same `TokenOut` shape as
+`/token`. Refresh tokens are single-use and rotate: presenting the same token
+twice (or a revoked/expired/unknown one) returns 401, so a replay collapses
+the session. Rate-limited per client IP.
+
+### `POST /api/v1/auth/logout`
+
+Status: `IMPLEMENTED`
+
+Revokes the presented (still valid) refresh token. Body:
+`{"refresh_token": "..."}`. Returns 204. Idempotent — the presented token is
+made unusable regardless of its previous state.
 
 ### `POST /api/v1/auth/me/member-link`
 
@@ -253,9 +280,120 @@ JSON object containing a timestamp and transaction ID.
 Returns 422 if the cursor is malformed, 403 if the caller has no active
 membership, 404 if the Chama does not exist.
 
+### `GET /api/v1/chamas/{chama_id}/ledger/accounts`
+
+Status: `IMPLEMENTED`
+
+Returns the Chama's ledger accounts with their current balances. Any active
+member of the Chama.
+
+**Response (`LedgerAccountsOut`):**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "code": "1000",
+      "name": "Cash",
+      "account_type": "ASSET",
+      "description": null,
+      "balance": "150.00"
+    }
+  ]
+}
+```
+
+Balances are signed decimals computed on demand from posted entries as
+`sum(debit) - sum(credit)` per account, quantized to two decimal places
+(`SignedMoney`; assets read positive, equity/revenue read negative). No
+balance is ever stored or maintained as a competing financial truth.
+
+Returns 403 if the caller has no active membership, 404 if the Chama does not
+exist.
+
+### `GET /api/v1/chamas/{chama_id}/ledger/accounts/{account_id}/entries`
+
+Status: `IMPLEMENTED`
+
+Returns one account with a cursor-paginated list of its posted entries
+(oldest-first within the account, keyset on `(created_at, id)`).
+
+**Query parameters:**
+- `limit` (int, 1–100, default 25) — page size.
+- `cursor` (string, optional) — opaque cursor from a previous response.
+
+**Response (`LedgerAccountEntriesOut`):**
+```json
+{
+  "account": { "id": "uuid", "code": "1000", "name": "Cash",
+               "account_type": "ASSET", "description": null, "balance": "150.00" },
+  "items": [
+    { "id": "uuid", "transaction_id": "uuid", "source_type": "CONTRIBUTION_CONFIRMATION",
+      "source_id": "uuid", "description": "...", "debit": "150.00",
+      "credit": "0.00", "created_at": "2026-09-16T09:37:34" }
+  ],
+  "next_cursor": "eyJ0...",
+  "has_more": false
+}
+```
+
+Returns 404 if the account does not exist or belongs to another Chama, 403 if
+the caller has no active membership, 422 if the cursor is malformed.
+
 Posting rules: there is no public endpoint that writes to the ledger. Ledger
 entries are created only by the trusted posting service when an approved
 business event is posted (ADR-012).
+
+## Payments (V3)
+
+Payment endpoints live under `/api/v1`. Connections management is
+chairperson-only; intents and attempts are readable by any active member and
+initiation selects an ACTIVE connection. Credentials are never returned.
+
+### Payment connections (ADR-017)
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/api/v1/chamas/{chama_id}/payment-connections` | Create a sealed connection (provider, environment, credentials). Chairperson. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-connections` | List connections. Any active member. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-connections/{connection_id}` | One connection. Any active member. |
+| `POST` | `/api/v1/chamas/{chama_id}/payment-connections/{connection_id}/validate` | Validate credentials → ACTIVE. Chairperson. |
+| `PATCH` | `/api/v1/chamas/{chama_id}/payment-connections/{connection_id}` | Replace credentials (new credential version). Chairperson. |
+| `POST` | `/api/v1/chamas/{chama_id}/payment-connections/{connection_id}/disable` | Idempotent disable. Chairperson. |
+| `DELETE` | `/api/v1/chamas/{chama_id}/payment-connections/{connection_id}` | 204. Blocked when financial history exists. Chairperson. |
+
+Connection lifecycle: `PENDING_VALIDATION → ACTIVE | INVALID`, with
+`replace() → PENDING_VALIDATION` (new version) and `disable() → DISABLED`.
+Every transition appends a `PaymentConnectionAudit` row. `PaymentConnectionOut`
+exposes only provider code, environment, status, masked account identifier,
+key/credential versions, validation info, and timestamps.
+
+### Payment intents and attempts (ADR-016)
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/api/v1/chamas/{chama_id}/payment-intents` | 201. Body: `membership_id`, `amount`, `currency` (default KES), `purpose`, `idempotency_key`, optional `contribution_id`. Idempotent by `(chama_id, idempotency_key)` with payload-hash matching. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-intents` | List intents. Any active member. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}` | One intent. Any active member. |
+| `POST` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}/initiate` | Body: `connection_id`. Starts an STK Push attempt against an ACTIVE connection (first or retry). |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}/attempts` | List attempts for an intent. Any active member. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-attempts/{attempt_id}` | One attempt across the Chama. Any active member. |
+
+Intent states: `PENDING → PROCESSING → SUCCEEDED | FAILED` (controlled).
+Attempt states include per-provider terminal outcomes (`PERMANENT_FAILURE`
+for known non-retryable errors, `TIMEOUT` with no provider request id, etc.);
+at most one attempt in flight; retry only after transient failure. A
+`provider_transactions` row records normalized status + raw provider response
+for offline resolution.
+
+### STK settlement (ADR-019)
+
+A payment intent whose attempt reaches `SUCCEEDED` settles its linked
+`contribution_id` (created as a contribution against the intent's membership)
+as the system user, idempotently, posting DR Cash / CR Share Capital. A
+succeeded intent without a linked contribution is a documented no-op (a
+system posting requires a settled contribution object); a duplicate success
+callback is an idempotent retry.
 
 ## Payments callbacks (V3)
 
@@ -266,7 +404,7 @@ provider, Daraja (sandbox and production).
 
 ### `POST /api/v1/payments/c2b/validate/{connection_id}`
 
-Status: `IMPLEMENTED` (fail-closed)
+Status: `IMPLEMENTED` (ADR-019)
 
 Daraja C2B (manual Paybill) Validation URL for the Daraja Register-URL
 activation step. Safaricom calls this before completing a payment.
@@ -280,21 +418,23 @@ request is unprocessable.
 
 **Response (`C2BValidationResponse`), always HTTP 200:**
 ```json
-{ "ResultCode": 1, "ResultDesc": "Rejected (OQ-021): ..." }
+{ "ResultCode": 0, "ResultDesc": "Accepted" }
 ```
 
-Accept logic does not exist yet: every validation is rejected with
-`ResultCode = 1` until a reference-matching rule is approved (OQ-021). The
-rejection is recorded as a `REJECTED` `payment_event` (identity
-`C2B_VALIDATION:<TransID>`) so every arrival is auditable. Unknown
-connections/tokens are also answered `ResultCode = 1` (never a 404/500).
+Accept logic (approved rule, OQ-021 / ADR-019): the payment is accepted
+(`ResultCode = 0`) only when the `BillRefNumber` matches the membership number
+of an ACTIVE membership on an ACTIVE payment connection; everything else is
+rejected (`ResultCode = 1`). Every arrival is recorded as a `payment_event`
+(identity `C2B_VALIDATION:<TransID>`) with its decided `ResultCode`, so every
+arrival is auditable. Unknown connections/tokens are answered `ResultCode = 1`
+(never a 404/500).
 
 ### `POST /api/v1/payments/c2b/confirm/{connection_id}`
 
-Status: `IMPLEMENTED` (acknowledges, stores, never posts to the ledger)
+Status: `IMPLEMENTED` (ADR-019)
 
 Daraja C2B (manual Paybill) Confirmation URL. Called by Safaricom after a
-payment completes (only relevant once the Validation URL accepts).
+payment completes.
 
 **Query parameters:** `token` (required).
 
@@ -302,20 +442,22 @@ payment completes (only relevant once the Validation URL accepts).
 
 **Response (`C2BConfirmationResponse`):**
 ```json
-{ "ok": true, "event_status": "PROCESSED" }
+{ "ok": true, "event_id": "<uuid>", "event_status": "PROCESSED" }
 ```
 
 - The raw payload and its SHA-256 hash are stored in `payment_events`
   (identity `C2B_CONFIRMATION:<TransID>`).
 - Idempotent: a duplicate delivery of the same `TransID` + identical payload
-  returns `DEDUPLICATED`; the same `TransID` with a different payload returns
-  `DISAGREEMENT`.
+  returns event_status `DEDUPLICATED`; the same `TransID` with a different
+  payload returns event_status `DISAGREEMENT`.
 - `BusinessShortCode` is compared to the connection's stored short code; a
-  mismatch is recorded and acknowledged as `UNPROCESSABLE` (the payment is
-  not ours to settle).
-- No ledger entry is written (`OQ-012/OQ-013`, `OQ-021`). Crediting the money
-  still requires an approved decision on the BillRefNumber-to-Chama/member
-  rule before confirmation can drive the ledger.
+  mismatch is recorded and acknowledged as event_status `UNPROCESSABLE` (the
+  payment is not ours to settle).
+- Settlement (ADR-019): confirmation records a **confirmed contribution** for
+  that membership number's current `YYYY-MM` period and posts the ledger
+  entry (DR `1000` Cash / CR `3000` Share Capital) as the system user
+  (`system@chamacore.invalid`). Duplicate/re-delivered confirmations are
+  deduplicated — one contribution and one ledger posting per `TransID`.
 - Invalid/unknown tokens return `400 WEBHOOK_REJECTED`.
 
 ### `POST /api/v1/payments/webhooks/{provider_code}/{environment}`

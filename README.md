@@ -165,7 +165,9 @@ Before changing code, read:
 10. `docs/10_V2_FINANCIAL_CORE.md`
 11. `docs/11_V3_PAYMENT_ARCHITECTURE.md`
 12. `docs/12_PRODUCTION_RUNBOOK.md`
+13. `docs/13_TEST_INVENTORY.md`
 
+The governing development brief is `reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md`.
 Accepted decisions are in `docs/decisions/`.
 
 ## Technology

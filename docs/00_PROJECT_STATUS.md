@@ -46,6 +46,29 @@ hardening and read-only ledger reporting landed on `main`:
   adds an explicit operational checklist (brief 3.4); the no-op rule for a
   succeeded STK intent without a linked contribution is documented.
 
+## Status note (23 Sep 2026, scale engineering — Steps 1 and 2)
+
+Following `reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md`, the first two steps
+of the governing development order landed on `main`:
+
+- **Step 1: repository consistency.** `AGENTS.md`, `docs/08_ROADMAP.md`
+  (now organized into COMPLETED / CURRENT / NEXT / DEFERRED / OUT OF SCOPE),
+  `docs/05_ARCHITECTURE.md`, `docs/06_API_CONTRACT.md`, `docs/03_BUSINESS_
+  RULES.md`, `docs/04_DATABASE.md`, `docs/09_GUIDE.md`, `docs/10_V2_FINANCIAL_
+  CORE.md`, and `docs/11_V3_PAYMENT_ARCHITECTURE.md` now describe the same
+  current state (V1, V2 Financial Core, V3 Payments, and production readiness
+  complete; the financial domain steps 4–9 blocked on recorded decisions).
+  Historical ADRs and migration history were not rewritten.
+- **Step 2: deferred-test inventory.** `docs/13_TEST_INVENTORY.md` records
+  every skipped test (27, all deferred Jenga adapter contract tests) with its
+  reason, required environment, whether CI should run it, and its activation
+  condition. Test categories (collected / active / deferred / failed) are
+  reported below.
+- Steps 3–9 (financial domain decisions, registration-fee accounting, loans,
+  loan repayments, payouts, financial reporting, business audit trail) are
+  explicitly blocked on OQ-014..OQ-020 and undecided report/audit definitions;
+  no rules were guessed.
+
 ## Status note (17 Sep 2026)
 
 Following the independent code-review reports (`reports/Overall_ChamaCore_
@@ -109,10 +132,12 @@ uvicorn app.main:app --reload
 pytest
 ```
 
-Of 307 tests, 280 pass on SQLite and 27 are deferred (skipped); native
-PostgreSQL concurrency and trigger paths run in CI. Interactive Swagger docs
-(`/docs`) and the raw OpenAPI schema are available only in debug builds
-(`CHAMACORE_DEBUG=true`) and are disabled in production.
+Of 307 tests: 280 active (passing) on SQLite and 27 deferred (skipped) — every
+deferred test has a recorded reason and activation path in
+`docs/13_TEST_INVENTORY.md`; zero failed. Native PostgreSQL concurrency and
+trigger paths run in CI. Interactive Swagger docs (`/docs`) and the raw
+OpenAPI schema are available only in debug builds (`CHAMACORE_DEBUG=true`)
+and are disabled in production.
 
 ## Implemented
 
@@ -267,7 +292,9 @@ Reports: `reports/03_V2LedgerReviewReport.md` (independent review findings),
 `reports/05_v3_payment_architecture.md` (V3 implementation evidence),
 `reports/Overall_ChamaCore_Code_Review_Report.md` (17 Sep morning review),
 `reports/Afternoon_ChamaCore_Code_Review_Report.md` (17 Sep afternoon
-re-review whose remaining technical items are implemented above), and
+re-review whose remaining technical items are implemented above),
 `reports/ChamaCore_Finalization_Report.md` (17 Sep finalization review whose
 implementable items — docs to HEAD, Daraja OAuth cache, seed script — are
-implemented above).
+implemented above), and `reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md` (the
+governing development brief; its Steps 1–2 are done, Steps 3–9 are
+decision-blocked).
