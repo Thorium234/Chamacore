@@ -2,12 +2,13 @@
 
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ConflictError, StateError
 from app.models.chama import Chama
-from app.models.enums import ChamaStatus, RoleName
+from app.models.enums import ChamaStatus, MembershipStatus, RoleName
 from app.models.membership import Membership
 from app.models.user import User
 from app.repositories.chama import ChamaRepository
@@ -73,6 +74,21 @@ class ChamaService:
         authorize_chama_access(self.db, actor=actor, chama_id=chama_id)
         return chama
 
+    def list_my_chamas(self, *, actor: User) -> list[Chama]:
+        """Return Chamas where the actor holds an ACTIVE membership."""
+        if actor.member_id is None:
+            return []
+        stmt = (
+            select(Chama)
+            .join(Membership, Membership.chama_id == Chama.id)
+            .where(
+                Membership.member_id == actor.member_id,
+                Membership.status == MembershipStatus.ACTIVE,
+            )
+            .order_by(Chama.created_at.desc(), Chama.id)
+        )
+        return list(self.db.scalars(stmt))
+
     def update_chama(self, *, actor: User, chama_id: uuid.UUID, data: ChamaUpdate) -> Chama:
         chama = get_chama_or_404(self.db, chama_id)
         membership = authorize_chama_access(self.db, actor=actor, chama_id=chama_id)
@@ -112,13 +128,21 @@ class ChamaService:
         return chama
 
     def _resolve_creator_member(self, user: User, data: ChamaCreate):
-        if data.member is not None:
-            return self._create_member(data.member)
+        """Attach the creator to their linked member when one exists (ADR-008).
+
+        A user whose `member_id` is already set keeps using that member for
+        every Chama they create, so they are always an ACTIVE member of the new
+        Chama. The request body's `member` details are ignored for linked users
+        because `users.member_id` is the authoritative identity; the payload is
+        only used to create a member when the user is not yet linked.
+        """
         if user.member_id is not None:
             member = self.members.get_by_id(user.member_id)
             if member is None:
                 raise StateError("The linked member no longer exists")
             return member
+        if data.member is not None:
+            return self._create_member(data.member)
         raise StateError("member details are required when creating a Chama")
 
     def _create_member(self, details: MemberDetails):

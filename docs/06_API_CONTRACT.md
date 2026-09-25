@@ -107,9 +107,30 @@ Returns the current authenticated user. Returns 401 if unauthenticated.
 
 Status: `IMPLEMENTED`
 
-Creates a Chama. Also creates a member identity for the authenticated user, links them, and assigns `CHAIRPERSON`.
+Creates a Chama and makes the authenticated user an ACTIVE member of it with
+`CHAIRPERSON` + `MEMBER` roles and an OWED registration fee (the creator is
+seeded with the default chart of accounts). Returns 201 with the Chama plus the
+creator's `membership_id` and `roles`.
+
+The creator's member identity is reconciled with their account (ADR-008):
+
+- If the user is **not yet linked** (`users.member_id` is NULL): a member is
+  created from the request body and linked to the user.
+- If the user is **already linked**: the new Chama's membership is attached to
+  their existing linked member and the body's `member` details are ignored (the
+  linked member is authoritative; the field may be omitted).
+
 Body: `{"name": "...", "registration_fee_amount": "100.00", "member": {"first_name": "...", "last_name": "...", "phone_number": "...", "government_id": "..."}}`.
-Returns 201 with the Chama. Returns 409 on duplicate phone, government ID, or user already linked.
+The `member` field is required only for an unlinked user.
+Returns 400 if `member` is missing for an unlinked user, 409 on duplicate phone
+or government ID when creating a new member.
+
+### `GET /api/v1/chamas`
+
+Status: `IMPLEMENTED`
+
+Lists the Chamas the authenticated user holds an ACTIVE membership in, newest
+first. Returns 200 with an array; an unlinked user gets an empty array.
 
 ### `GET /api/v1/chamas/{chama_id}`
 

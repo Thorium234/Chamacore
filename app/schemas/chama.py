@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import ChamaStatus
+from app.models.enums import ChamaStatus, RoleName
 from app.schemas.common import Money
 
 
@@ -57,6 +57,18 @@ class ChamaCreate(BaseModel):
     description: str | None = None
     registration_fee_amount: Money = Decimal("0")
     member: MemberDetails | None = None
+
+
+class ChamaCreatedOut(ChamaOut):
+    """Create response: the Chama plus the creator's new membership.
+
+    `member` in the request is ignored (and may be omitted) once the user is
+    already linked to a member; the creator always lands as an ACTIVE member of
+    the new Chama with CHAIRPERSON + MEMBER roles.
+    """
+
+    membership_id: uuid.UUID | None = None
+    roles: list[RoleName] = Field(default_factory=list)
 
 
 class ChamaUpdate(BaseModel):

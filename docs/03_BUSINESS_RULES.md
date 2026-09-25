@@ -54,6 +54,10 @@ Only rules marked `APPROVED` may be implemented.
 ### Chama access (ADR-008)
 
 - The creator of a Chama is automatically added as a member with `CHAIRPERSON` role.
+- A user already linked to a member (`users.member_id` set) reuses that linked
+  member for every Chama they create; the create body's `member` details are
+  ignored for linked users. An unlinked user has a member created from the body
+  and is then linked.
 - Authorization requires an active membership in the Chama.
 
 ### Registration fees (ADR-003)
