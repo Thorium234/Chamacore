@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -40,11 +40,15 @@ def apply_for_loan(
 @router.get("/chamas/{chama_id}/loans", response_model=list[LoanOut])
 def list_loans(
     chama_id: uuid.UUID,
+    limit: int | None = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
     service = LoanService(db)
-    loans = service.list_by_chama(actor=actor, chama_id=chama_id)
+    loans = service.list_by_chama(
+        actor=actor, chama_id=chama_id, limit=limit, offset=offset
+    )
     return [_serialize(service, loan) for loan in loans]
 
 
@@ -52,12 +56,18 @@ def list_loans(
 def list_member_loans(
     chama_id: uuid.UUID,
     membership_id: uuid.UUID,
+    limit: int | None = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
     service = LoanService(db)
     loans = service.list_by_membership(
-        actor=actor, chama_id=chama_id, membership_id=membership_id
+        actor=actor,
+        chama_id=chama_id,
+        membership_id=membership_id,
+        limit=limit,
+        offset=offset,
     )
     return [_serialize(service, loan) for loan in loans]
 
@@ -147,11 +157,15 @@ def record_loan_repayment(
 def list_loan_repayments(
     chama_id: uuid.UUID,
     loan_id: uuid.UUID,
+    limit: int | None = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
     service = LoanService(db)
-    repayments = service.list_repayments(actor=actor, chama_id=chama_id, loan_id=loan_id)
+    repayments = service.list_repayments(
+        actor=actor, chama_id=chama_id, loan_id=loan_id, limit=limit, offset=offset
+    )
     return [LoanRepaymentOut.model_validate(r) for r in repayments]
 
 

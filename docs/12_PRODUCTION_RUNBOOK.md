@@ -111,7 +111,7 @@ strategy for the ledger.
 |----------|---------|
 | `GET /health` | Liveness; no database check |
 | `GET /ready` | Readiness; verifies database connectivity |
-| `GET /metrics` | Prometheus text exposition of HTTP request counters and latency |
+| `GET /metrics` | Prometheus text exposition of HTTP request counters/latency and payment-operation metrics |
 | `/docs`, `/redoc`, `/openapi.json` | API docs — **debug builds only**; absent in production |
 
 Docs exposure: interactive API docs and the raw OpenAPI schema are only wired
@@ -131,6 +131,52 @@ wget -q -O- --header="X-Metrics-Token: $CHAMACORE_METRICS_TOKEN" \
 
 Scrape in application header namespaces (`chamacore_http_requests_total`,
 `chamacore_http_request_duration_seconds_*`).
+
+## Payment monitoring and reconciliation
+
+Payment coverage rides on `GET /metrics` next to the HTTP signals
+(`docs/14_GAP_ANALYSIS_AND_IMPROVEMENT_PLAN.md` P2#3). All payment metrics use
+**bounded-cardinality labels** — provider code, environment, and a controlled
+outcome. Never label metrics with user IDs, phone numbers, raw callback
+bodies, transaction IDs, or secrets.
+
+| Metric | Type | Meaning |
+|--------|------|---------|
+| `chamacore_payment_webhook_events_total{provider,environment,outcome}` | counter | Stored callbacks by outcome (`RECEIVED`, `PROCESSED`, `DEDUPLICATED`, `UNPROCESSABLE`, `DISAGREEMENT`). Each delivery is counted once at store time (usually `RECEIVED`) and again at its final status. |
+| `chamacore_payment_settlement_seconds{provider,environment}` | histogram | Elapsed time from callback receipt to contribution settlement (linked intents only). |
+| `chamacore_payment_events_stale_received` | gauge | `RECEIVED` events still inside the stale window, last seen by the reconciliation job. |
+| `chamacore_payment_intents_processing` | gauge | Intents currently in `PROCESSING`, last seen by the reconciliation job. |
+| `chamacore_payment_initiation_total{provider,environment,outcome}` | counter | Initiation attempts by outcome (`INITIATED`, `TIMEOUT`, `FAILED`). |
+| `chamacore_payment_validation_total{provider,environment,outcome}` | counter | Connection validation outcomes (`valid`, `invalid`). |
+
+Alert on: `payment_events_stale_received` above zero, `payment_intents_processing`
+stuck above zero, rising `DISAGREEMENT`/`UNPROCESSABLE` rates, escalating
+`TIMEOUT`/`FAILED` initiations, and 5xx on the webhook endpoint.
+
+Metrics are in-process memory; run **one** uvicorn process (see Architecture
+notes). Central aggregation of metrics is a prerequisite for adding workers.
+
+Reconciliation procedure for stuck or unsettled callbacks:
+
+1. Run the read-only inbox check (reads the app's `CHAMACORE_DATABASE_URL`):
+
+   ```bash
+   python scripts/reconcile_payment_events.py --minutes 30
+   ```
+
+   It lists `RECEIVED` events older than the window and refreshes the
+   processing/stale gauges. Exit code `0` = healthy; `1` = stale events found
+   (suitable for a cron check that pages an operator).
+2. For each stale event, re-deliver the upstream callback **with the same event
+   id and payload** so the inbox resumes it instead of dropping it as a
+   duplicate. Confirm the event reaches `PROCESSED` and any linked contribution
+   settles exactly once.
+3. If the callback cannot be re-delivered, resolve provider-success /
+   local-unsettled cases through the idempotent service paths (attempt binding
+   by `provider_request_id` or `provider_transaction_id`). Never hand-edit
+   financial rows.
+
+The script never marks, re-drives, or deletes events.
 
 ## Logging and correlation
 
@@ -213,7 +259,8 @@ terminate TLS there and keep HSTS consistent end to end.
 - [ ] Migrations applied before code rollout
 - [ ] Behind TLS-terminating reverse proxy
 - [ ] Security headers verified at the proxy and in the app response
-- [ ] `CHAMACORE_METRICS_TOKEN` set; Prometheus scraping `/metrics` with the header, alerting on `count_total` and 5xx rate
+- [ ] `CHAMACORE_METRICS_TOKEN` set; Prometheus scraping `/metrics` with the header, alerting on `count_total`, 5xx rate, and the payment signals (stale `RECEIVED`, `PROCESSING` intents, disagreement/unprocessable rates)
+- [ ] `scripts/reconcile_payment_events.py` scheduled (cron) and paginating on exit code `1`
 - [ ] Clients implemented against the 120-minute access-token + refresh flow
 - [ ] `X-REQUEST-ID` forwarded by the proxy
 - [ ] Backups configured and restore-tested

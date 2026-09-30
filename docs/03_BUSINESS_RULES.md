@@ -226,6 +226,11 @@ Only rules marked `APPROVED` may be implemented.
 - Disbursement posts DR `1100` Loans Receivable / CR `1000` Cash. Repayment
   posts DR Cash / CR Loans Receivable (principal) and Interest Income
   (interest). Reversal uses a compensating ledger transaction.
+- Concurrency invariant: disbursement serializes on the Chama's `1000` Cash
+  ledger account row (`SELECT ... FOR UPDATE`, `lock_cash_account`). A
+  disbursement acquires the row lock before reading the available-cash balance
+  and posting, so concurrent disbursements cannot both pass an availability
+  check that relies on the same cash balance.
 
 ### Payouts (ADR-021)
 
@@ -237,6 +242,10 @@ Only rules marked `APPROVED` may be implemented.
 - Completion posts DR `3000` Share Capital / CR `1000` Cash atomically with
   the completed state. Reversal posts a compensating ledger transaction.
 - Payout business status alone does not represent financial settlement.
+- Concurrency invariant: completion serializes on the Chama's `1000` Cash
+  ledger account row (`SELECT ... FOR UPDATE`, `lock_cash_account`) before
+  reading available cash and posting, so concurrent completions cannot both
+  pass an availability check that relies on the same cash balance.
 
 ### Business audit events (ADR-023)
 

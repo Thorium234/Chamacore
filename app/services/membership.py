@@ -60,10 +60,12 @@ class MembershipService:
         self.fees = RegistrationFeeRepository(db)
         self.audit = AuditService(db)
 
-    def list_by_chama(self, *, actor: User, chama_id: uuid.UUID) -> list[Membership]:
+    def list_by_chama(
+        self, *, actor: User, chama_id: uuid.UUID, limit: int | None = None, offset: int = 0
+    ) -> list[Membership]:
         chama = get_chama_or_404(self.db, chama_id)
         authorize_chama_access(self.db, actor=actor, chama_id=chama_id)
-        return self.memberships.list_by_chama(chama.id)
+        return self.memberships.list_by_chama(chama.id, limit=limit, offset=offset)
 
     def create_membership(self, *, actor: User, chama_id: uuid.UUID, data: MembershipCreate) -> Membership:
         chama = get_chama_or_404(self.db, chama_id)

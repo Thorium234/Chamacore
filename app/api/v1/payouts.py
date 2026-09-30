@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -28,10 +28,14 @@ def request_payout(
 @router.get("/chamas/{chama_id}/payouts", response_model=list[PayoutOut])
 def list_payouts(
     chama_id: uuid.UUID,
+    limit: int | None = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    payouts = PayoutService(db).list_by_chama(actor=actor, chama_id=chama_id)
+    payouts = PayoutService(db).list_by_chama(
+        actor=actor, chama_id=chama_id, limit=limit, offset=offset
+    )
     return [PayoutOut.model_validate(p) for p in payouts]
 
 

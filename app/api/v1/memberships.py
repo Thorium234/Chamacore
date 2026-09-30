@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -17,10 +17,14 @@ router = APIRouter(tags=["memberships"])
 @router.get("/chamas/{chama_id}/memberships", response_model=list[MembershipOut])
 def list_memberships(
     chama_id: uuid.UUID,
+    limit: int | None = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    memberships = MembershipService(db).list_by_chama(actor=actor, chama_id=chama_id)
+    memberships = MembershipService(db).list_by_chama(
+        actor=actor, chama_id=chama_id, limit=limit, offset=offset
+    )
     return [MembershipOut.model_validate(m) for m in memberships]
 
 

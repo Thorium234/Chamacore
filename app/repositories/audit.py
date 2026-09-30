@@ -40,11 +40,14 @@ class AuditRepository(BaseRepository):
         self.db.flush()
         return event
 
-    def list_by_chama(self, chama_id: uuid.UUID, *, limit: int = 200) -> list[AuditEvent]:
+    def list_by_chama(
+        self, chama_id: uuid.UUID, *, limit: int = 200, offset: int = 0
+    ) -> list[AuditEvent]:
         stmt = (
             select(AuditEvent)
             .where(AuditEvent.chama_id == chama_id)
             .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
             .limit(limit)
+            .offset(offset)
         )
         return list(self.db.scalars(stmt))

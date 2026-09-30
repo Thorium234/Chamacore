@@ -49,6 +49,26 @@ Every response carries an `X-Request-ID` header. If the client supplied one
 on the request, it is echoed back; otherwise the server generates one. All
 log records for the request carry the same value.
 
+## List collection endpoints
+
+Chama-scoped list endpoints accept two optional query parameters and always
+return a plain JSON array (the response shape never changed):
+
+- `limit` (int, 1–500) — maximum number of rows to return. Omitted (default)
+  returns the full list. The audit-events endpoint defaults to the most
+  recent **200** events when `limit` is omitted.
+- `offset` (int, >= 0, default 0) — number of rows to skip before the first
+  returned row. Offsets are stable because every list has a total ordering
+  (a unique key tiebreaker) — e.g. contributions order by
+  `(period, created_at, id)`.
+
+Values outside the ranges return HTTP 422. Endpoints with these parameters:
+`GET .../memberships`, `GET .../contributions`, `GET .../loans`,
+`GET .../memberships/{membership_id}/loans`,
+`GET .../loans/{loan_id}/repayments`, `GET .../payouts`,
+`GET .../payment-connections`, `GET .../payment-intents`,
+`GET .../audit-events`.
+
 ## Authentication
 
 ### `POST /api/v1/auth/register`
@@ -163,6 +183,7 @@ Returns 201 with the membership. Returns 409 on duplicate member/membership.
 Status: `IMPLEMENTED`
 
 Returns all memberships for the Chama, ordered by membership number.
+Supports `limit`/`offset` (see "List collection endpoints").
 Returns 403 if unauthorized, 404 if Chama not found.
 
 ### `PATCH /api/v1/chamas/{chama_id}/memberships/{membership_id}/status`
@@ -240,6 +261,7 @@ Returns 201. Returns 409 on duplicate non-reversed contribution for the period.
 Status: `IMPLEMENTED`
 
 Returns all contributions for a Chama. Any authorized member.
+Supports `limit`/`offset` (see "List collection endpoints").
 
 ### `POST /api/v1/chamas/{chama_id}/contributions/{contribution_id}/confirm`
 
@@ -390,7 +412,7 @@ initiation selects an ACTIVE connection. Credentials are never returned.
 | Method | Path | Notes |
 | --- | --- | --- |
 | `POST` | `/api/v1/chamas/{chama_id}/payment-connections` | Create a sealed connection (provider, environment, credentials). Chairperson. |
-| `GET` | `/api/v1/chamas/{chama_id}/payment-connections` | List connections. Any active member. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-connections` | List connections. Any active member. Supports `limit`/`offset`. |
 | `GET` | `/api/v1/chamas/{chama_id}/payment-connections/{connection_id}` | One connection. Any active member. |
 | `POST` | `/api/v1/chamas/{chama_id}/payment-connections/{connection_id}/validate` | Validate credentials → ACTIVE. Chairperson. |
 | `PATCH` | `/api/v1/chamas/{chama_id}/payment-connections/{connection_id}` | Replace credentials (new credential version). Chairperson. |
@@ -408,7 +430,7 @@ key/credential versions, validation info, and timestamps.
 | Method | Path | Notes |
 | --- | --- | --- |
 | `POST` | `/api/v1/chamas/{chama_id}/payment-intents` | 201. Body: `membership_id`, `amount`, `currency` (default KES), `purpose`, `idempotency_key`, optional `contribution_id`. Idempotent by `(chama_id, idempotency_key)` with payload-hash matching. |
-| `GET` | `/api/v1/chamas/{chama_id}/payment-intents` | List intents. Any active member. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-intents` | List intents. Any active member. Supports `limit`/`offset`. |
 | `GET` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}` | One intent. Any active member. |
 | `POST` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}/initiate` | Body: `connection_id`. Starts an STK Push attempt against an ACTIVE connection (first or retry). |
 | `GET` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}/attempts` | List attempts for an intent. Any active member. |
@@ -545,15 +567,15 @@ See ADR-020 for full business rules and ledger postings.
 | Method | Path | Behavior |
 | --- | --- | --- |
 | `POST` | `/api/v1/chamas/{chama_id}/loans` | Apply for a loan; `201`; body `LoanApplyRequest`. |
-| `GET` | `/api/v1/chamas/{chama_id}/loans` | List Chama loans. |
-| `GET` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/loans` | List loans for a membership. |
+| `GET` | `/api/v1/chamas/{chama_id}/loans` | List Chama loans. Supports `limit`/`offset`. |
+| `GET` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/loans` | List loans for a membership. Supports `limit`/`offset`. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/submit` | Submit a draft application. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/approve` | Approve an eligible application; chairperson, applicant cannot self-approve. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/reject` | Reject an application; optional `LoanRejectRequest` note. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/cancel` | Cancel an approved, not-yet-disbursed loan. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/disburse` | Disburse an approved loan and post atomically to the ledger. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments` | Record repayment; `201`; body `LoanRepaymentCreate`. |
-| `GET` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments` | List repayment history. |
+| `GET` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments` | List repayment history. Supports `limit`/`offset`. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments/{repayment_id}/reverse` | Reverse a repayment with a compensating ledger posting; optional note. |
 
 The member applies; chairperson actions approve, reject, cancel, and disburse.
@@ -565,7 +587,7 @@ Limits, derived balances, and repayment allocation are defined by ADR-020.
 | Method | Path | Behavior |
 | --- | --- | --- |
 | `POST` | `/api/v1/chamas/{chama_id}/payouts` | Request payout; `201`; body `PayoutRequestCreate`. |
-| `GET` | `/api/v1/chamas/{chama_id}/payouts` | List Chama payouts. |
+| `GET` | `/api/v1/chamas/{chama_id}/payouts` | List Chama payouts. Supports `limit`/`offset`. |
 | `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/approve` | Approve request; chairperson, requester cannot self-approve. |
 | `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/reject` | Reject request; chairperson. |
 | `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/process` | Mark payout processing; chairperson or treasurer. |
@@ -584,9 +606,10 @@ completion (ADR-021).
 Status: `IMPLEMENTED`
 
 Returns append-only business audit events for the Chama to an active member.
-Events are separate from application logs and ledger transactions. No public
-write, update, or delete endpoints exist. Audit metadata must not contain
-passwords, tokens, secrets, or payment credentials.
+Supports `limit`/`offset`; when `limit` is omitted the most recent 200 events
+are returned. Events are separate from application logs and ledger
+transactions. No public write, update, or delete endpoints exist. Audit
+metadata must not contain passwords, tokens, secrets, or payment credentials.
 
 ## API rules
 

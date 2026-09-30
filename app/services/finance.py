@@ -49,6 +49,27 @@ def available_chama_cash(db: Session, chama_id: uuid.UUID) -> Decimal:
     return Decimal(balance).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def lock_cash_account(db: Session, chama_id: uuid.UUID) -> uuid.UUID:
+    """Serialize cash-decreasing decisions for a Chama by locking its Cash row.
+
+    ``SELECT ... FOR UPDATE`` on the CASH ledger account serializes concurrent
+    admission decisions (loan disbursement, payout completion) that read
+    ``available_chama_cash`` and then reduce Cash. The row lock is held until
+    the caller's transaction commits, so a concurrent second decision cannot
+    observe a stale balance and overspend the Chama. On SQLite the clause is a
+    no-op (single-writer serialization already holds); the guarantee is proven
+    on PostgreSQL by the ``concurrency``-marked race tests.
+    """
+    account = db.scalars(
+        select(LedgerAccount)
+        .where(LedgerAccount.chama_id == chama_id, LedgerAccount.code == "1000")
+        .with_for_update()
+    ).first()
+    if account is None:
+        raise StateError("The default ledger account 1000 is missing for this Chama")
+    return account.id
+
+
 def member_share_value(db: Session, membership_id: uuid.UUID) -> Decimal:
     """Member share value = ACTIVE share units times the unit price.
 

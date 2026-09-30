@@ -15,12 +15,16 @@ class PayoutRepository(BaseRepository):
     def get_by_id(self, payout_id: uuid.UUID) -> Payout | None:
         return self.db.get(Payout, payout_id)
 
-    def list_by_chama(self, chama_id: uuid.UUID) -> list[Payout]:
+    def list_by_chama(
+        self, chama_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+    ) -> list[Payout]:
         stmt = (
             select(Payout)
             .where(Payout.chama_id == chama_id)
             .order_by(Payout.requested_at, Payout.id)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
         return list(self.db.scalars(stmt))
 
     def list_by_membership(self, membership_id: uuid.UUID) -> list[Payout]:

@@ -14,6 +14,12 @@ Connection status policy (ADR-017):
 - replace credentials -> PENDING_VALIDATION (must re-validate)
 - disable -> DISABLED (blocks all new attempts; history preserved)
 - delete -> allowed only for connections with no payment attempts/events
+
+Business audit events (ADR-023) for lifecycle mutations are written in the
+*same* transaction as the connection change: ``AuditService.record`` before the
+single ``commit``, so a failing audit can never leave a connection change
+committed without its audit record. ``register_c2b_urls`` is the exception: it
+mutates nothing locally, so its audit event is committed on its own.
 """
 
 import uuid
@@ -27,6 +33,7 @@ from app.core.credential_cipher import CredentialCipher, CredentialCipherError
 from app.core.callback_utils import connection_callback_token
 from app.core.config import get_settings
 from app.core.errors import ConflictError, RateLimitError, StateError
+from app.core.metrics import payment_validation_total
 from app.core.ratelimit import RateLimiter
 from app.models.enums import (
     PaymentConnectionAuditAction,
@@ -138,6 +145,14 @@ class PaymentConnectionService:
             previous_status=None,
             new_status=PaymentConnectionStatus.PENDING_VALIDATION,
         )
+        self.business_audit.record(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.PAYMENT_CONNECTION_CREATED,
+            resource_type="payment_connection",
+            resource_id=connection.id,
+            payload={"provider": connection.provider_code.value, "environment": connection.environment.value},
+        )
         try:
             self.db.commit()
         except IntegrityError:
@@ -146,19 +161,18 @@ class PaymentConnectionService:
                 "This Chama already has a connection for this provider and environment"
             )
         self.db.refresh(connection)
-        self.business_audit.record_commit(
-            actor=actor,
-            chama_id=chama.id,
-            action=AuditAction.PAYMENT_CONNECTION_CREATED,
-            resource_type="payment_connection",
-            resource_id=connection.id,
-            payload={"provider": connection.provider_code.value, "environment": connection.environment.value},
-        )
         return connection
 
-    def list(self, *, actor: User, chama_id: uuid.UUID) -> list[PaymentConnection]:
+    def list(
+        self,
+        *,
+        actor: User,
+        chama_id: uuid.UUID,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[PaymentConnection]:
         chama = self._member_chama(actor, chama_id)
-        return self.connections.list_by_chama(chama.id)
+        return self.connections.list_by_chama(chama.id, limit=limit, offset=offset)
 
     def get(
         self, *, actor: User, chama_id: uuid.UUID, connection_id: uuid.UUID
@@ -207,9 +221,7 @@ class PaymentConnectionService:
             previous_status=previous_status,
             new_status=PaymentConnectionStatus.PENDING_VALIDATION,
         )
-        self.db.commit()
-        self.db.refresh(connection)
-        self.business_audit.record_commit(
+        self.business_audit.record(
             actor=actor,
             chama_id=chama.id,
             action=AuditAction.PAYMENT_CONNECTION_CREDENTIALS_REPLACED,
@@ -217,7 +229,20 @@ class PaymentConnectionService:
             resource_id=connection.id,
             payload={"credential_version": connection.credential_version},
         )
+        self.db.commit()
+        self.db.refresh(connection)
         return connection
+
+    @staticmethod
+    def _record_validation_outcome(connection, outcome: str) -> None:
+        """Count one validation attempt by bounded (provider, env, outcome)."""
+        payment_validation_total.inc(
+            (
+                connection.provider_code.value,
+                connection.environment.value,
+                outcome,
+            )
+        )
 
     def validate(
         self, *, actor: User, chama_id: uuid.UUID, connection_id: uuid.UUID
@@ -267,9 +292,7 @@ class PaymentConnectionService:
                 previous_status=None,
                 new_status=connection.status,
             )
-            self.db.commit()
-            self.db.refresh(connection)
-            self.business_audit.record_commit(
+            self.business_audit.record(
                 actor=actor,
                 chama_id=chama.id,
                 action=AuditAction.PAYMENT_CONNECTION_VALIDATED,
@@ -277,6 +300,9 @@ class PaymentConnectionService:
                 resource_id=connection.id,
                 payload={"status": connection.status.value},
             )
+            self.db.commit()
+            self.db.refresh(connection)
+            self._record_validation_outcome(connection, "invalid")
             return connection
 
         if result.valid:
@@ -309,9 +335,7 @@ class PaymentConnectionService:
             previous_status=None,
             new_status=connection.status,
         )
-        self.db.commit()
-        self.db.refresh(connection)
-        self.business_audit.record_commit(
+        self.business_audit.record(
             actor=actor,
             chama_id=chama.id,
             action=AuditAction.PAYMENT_CONNECTION_VALIDATED,
@@ -320,13 +344,16 @@ class PaymentConnectionService:
             payload={"status": connection.status.value},
         )
         if connection.status == PaymentConnectionStatus.ACTIVE and not was_disabled:
-            self.business_audit.record_commit(
+            self.business_audit.record(
                 actor=actor,
                 chama_id=chama.id,
                 action=AuditAction.PAYMENT_CONNECTION_ENABLED,
                 resource_type="payment_connection",
                 resource_id=connection.id,
             )
+        self.db.commit()
+        self.db.refresh(connection)
+        self._record_validation_outcome(connection, "valid" if result.valid else "invalid")
         return connection
 
     def register_c2b_urls(
@@ -395,6 +422,9 @@ class PaymentConnectionService:
                 "the shortcode still answers the old URLs"
             ) from exc
 
+        # C2B registration performs no local state change, so the audit event
+        # is recorded in its own transaction (record_commit) on purpose — there
+        # is no connection mutation to keep atomic with.
         self.business_audit.record_commit(
             actor=actor,
             chama_id=chama.id,
@@ -433,9 +463,7 @@ class PaymentConnectionService:
             previous_status=previous_status,
             new_status=PaymentConnectionStatus.DISABLED,
         )
-        self.db.commit()
-        self.db.refresh(connection)
-        self.business_audit.record_commit(
+        self.business_audit.record(
             actor=actor,
             chama_id=chama.id,
             action=AuditAction.PAYMENT_CONNECTION_DISABLED,
@@ -443,6 +471,8 @@ class PaymentConnectionService:
             resource_id=connection.id,
             payload={"previous_status": previous_status.value},
         )
+        self.db.commit()
+        self.db.refresh(connection)
         return connection
 
     def delete(
@@ -462,6 +492,14 @@ class PaymentConnectionService:
             action=PaymentConnectionAuditAction.DELETED,
             previous_status=connection.status,
             new_status=None,
+        )
+        self.business_audit.record(
+            actor=actor,
+            chama_id=chama.id,
+            action=AuditAction.PAYMENT_CONNECTION_DELETED,
+            resource_type="payment_connection",
+            resource_id=connection.id,
+            payload={"status": connection.status.value},
         )
         self.db.delete(connection)
         self.db.commit()

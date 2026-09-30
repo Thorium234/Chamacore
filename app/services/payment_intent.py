@@ -42,6 +42,7 @@ from app.core.callback_utils import canonical_payload_hash, connection_callback_
 from app.core.config import get_settings
 from app.core.credential_cipher import CredentialCipher, CredentialCipherError
 from app.core.errors import ConflictError, RateLimitError, StateError
+from app.core.metrics import payment_initiation_total, payment_intents_processing
 from app.core.ratelimit import RateLimiter
 from app.models.enums import (
     ContributionStatus,
@@ -235,9 +236,27 @@ class PaymentIntentService:
             raise StateError("Payment intent not found in this Chama")
         return intent
 
-    def list_intents(self, *, actor: User, chama_id: uuid.UUID) -> list[PaymentIntent]:
+    def list_intents(
+        self,
+        *,
+        actor: User,
+        chama_id: uuid.UUID,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[PaymentIntent]:
         chama = self._chama(actor, chama_id)
-        return self.intents.list_by_chama(chama.id)
+        return self.intents.list_by_chama(chama.id, limit=limit, offset=offset)
+
+    def refresh_processing_gauge(self) -> None:
+        """Publish the current global count of PROCESSING intents.
+
+        Called by the operator reconciliation job so ``/metrics`` shows how
+        many intents are stuck in flight (bounded signal, no per-Chama
+        cardinality).
+        """
+        payment_intents_processing.set(
+            self.intents.count_by_status(PaymentIntentStatus.PROCESSING)
+        )
 
     def get_attempt(
         self, *, actor: User, chama_id: uuid.UUID, attempt_id: uuid.UUID
@@ -376,6 +395,17 @@ class PaymentIntentService:
 
     # -- attempt creation ---------------------------------------------------
 
+    @staticmethod
+    def _record_initiation(attempt: PaymentAttempt, connection) -> None:
+        """Count one provider initiation by bounded (provider, env, outcome)."""
+        payment_initiation_total.inc(
+            (
+                connection.provider_code.value,
+                connection.environment.value,
+                attempt.status.value,
+            )
+        )
+
     def _create_attempt(
         self,
         intent: PaymentIntent,
@@ -429,6 +459,7 @@ class PaymentIntentService:
             self.db.add_all([attempt, transaction])
             self.db.commit()
             self.db.refresh(attempt)
+            self._record_initiation(attempt, connection)
             return attempt
         except ProviderIntegrationError as exc:
             attempt.status = PaymentAttemptStatus.FAILED
@@ -441,6 +472,7 @@ class PaymentIntentService:
             self.db.add_all([attempt, transaction])
             self.db.commit()
             self.db.refresh(attempt)
+            self._record_initiation(attempt, connection)
             return attempt
 
         if result.accepted:
@@ -459,6 +491,7 @@ class PaymentIntentService:
             self.db.add(transaction)
             self.db.commit()
             self.db.refresh(attempt)
+            self._record_initiation(attempt, connection)
             return attempt
 
         attempt.status = PaymentAttemptStatus.FAILED
@@ -471,6 +504,7 @@ class PaymentIntentService:
         self.db.add_all([attempt, transaction])
         self.db.commit()
         self.db.refresh(attempt)
+        self._record_initiation(attempt, connection)
         return attempt
 
     def _unique_client_reference(

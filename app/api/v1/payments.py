@@ -8,7 +8,7 @@ blobs.
 
 import uuid
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -57,10 +57,14 @@ def create_payment_connection(
 )
 def list_payment_connections(
     chama_id: uuid.UUID,
+    limit: int | None = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    return PaymentConnectionService(db).list(actor=actor, chama_id=chama_id)
+    return PaymentConnectionService(db).list(
+        actor=actor, chama_id=chama_id, limit=limit, offset=offset
+    )
 
 
 @router.get(
@@ -191,10 +195,14 @@ def create_payment_intent(
 )
 def list_payment_intents(
     chama_id: uuid.UUID,
+    limit: int | None = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    return PaymentIntentService(db).list_intents(actor=actor, chama_id=chama_id)
+    return PaymentIntentService(db).list_intents(
+        actor=actor, chama_id=chama_id, limit=limit, offset=offset
+    )
 
 
 @router.get(

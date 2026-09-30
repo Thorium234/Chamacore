@@ -25,12 +25,16 @@ class LoanRepaymentRepository(BaseRepository):
         )
         return list(self.db.scalars(stmt))
 
-    def list_by_loan(self, loan_id: uuid.UUID) -> list[LoanRepayment]:
+    def list_by_loan(
+        self, loan_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+    ) -> list[LoanRepayment]:
         stmt = (
             select(LoanRepayment)
             .where(LoanRepayment.loan_id == loan_id)
             .order_by(LoanRepayment.recorded_at, LoanRepayment.id)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
         return list(self.db.scalars(stmt))
 
     def create(

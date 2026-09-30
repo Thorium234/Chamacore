@@ -12,15 +12,19 @@ class ContributionRepository(BaseRepository):
     def get_by_id(self, contribution_id: uuid.UUID) -> Contribution | None:
         return self.db.get(Contribution, contribution_id)
 
-    def list_by_chama(self, chama_id: uuid.UUID) -> list[Contribution]:
+    def list_by_chama(
+        self, chama_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+    ) -> list[Contribution]:
         from sqlalchemy import select
 
         stmt = (
             select(Contribution)
             .join(Contribution.membership)
             .where(Contribution.membership.has(chama_id=chama_id))
-            .order_by(Contribution.period, Contribution.created_at)
+            .order_by(Contribution.period, Contribution.created_at, Contribution.id)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
         return list(self.db.scalars(stmt))
 
     def create(

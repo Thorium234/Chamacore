@@ -29,7 +29,12 @@ from app.services.access import (
     require_roles,
 )
 from app.services.audit import AuditAction, AuditService
-from app.services.finance import available_chama_cash, get_account_id, member_share_value
+from app.services.finance import (
+    available_chama_cash,
+    get_account_id,
+    lock_cash_account,
+    member_share_value,
+)
 from app.services.ledger import (
     CASH_CODE,
     INTEREST_INCOME_CODE,
@@ -184,6 +189,10 @@ class LoanService:
         second financial effect. A loan can never be DISBURSED without its
         ledger transaction or posted without changing state, because both
         happen in one transaction.
+
+        The Chama's Cash ledger row is locked (``lock_cash_account``) before
+        the cash check, so concurrent disbursements/payout completions are
+        serialized and cannot collectively overspend the Chama's cash.
         """
         chama = get_chama_or_404(self.db, chama_id)
         actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
@@ -196,6 +205,7 @@ class LoanService:
                 raise StateError("Disbursed loan is missing its ledger transaction")
             return loan
 
+        lock_cash_account(self.db, chama.id)
         self._transition(loan, (LoanStatus.APPROVED,), LoanStatus.DISBURSED)
         cash = available_chama_cash(self.db, chama.id)
         if loan.principal > cash:
@@ -364,26 +374,40 @@ class LoanService:
 
     # --- reads ------------------------------------------------------------
 
-    def list_by_chama(self, *, actor: User, chama_id: uuid.UUID) -> list[Loan]:
+    def list_by_chama(
+        self, *, actor: User, chama_id: uuid.UUID, limit: int | None = None, offset: int = 0
+    ) -> list[Loan]:
         chama = get_chama_or_404(self.db, chama_id)
         authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
-        return self.loans.list_by_chama(chama.id)
+        return self.loans.list_by_chama(chama.id, limit=limit, offset=offset)
 
     def list_by_membership(
-        self, *, actor: User, chama_id: uuid.UUID, membership_id: uuid.UUID
+        self,
+        *,
+        actor: User,
+        chama_id: uuid.UUID,
+        membership_id: uuid.UUID,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[Loan]:
         chama = get_chama_or_404(self.db, chama_id)
         authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
         membership = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
-        return self.loans.list_by_membership(membership.id)
+        return self.loans.list_by_membership(membership.id, limit=limit, offset=offset)
 
     def list_repayments(
-        self, *, actor: User, chama_id: uuid.UUID, loan_id: uuid.UUID
+        self,
+        *,
+        actor: User,
+        chama_id: uuid.UUID,
+        loan_id: uuid.UUID,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[object]:
         chama = get_chama_or_404(self.db, chama_id)
         authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
         loan = self._get_chama_loan(chama.id, loan_id)
-        return self.repayments.list_by_loan(loan.id)
+        return self.repayments.list_by_loan(loan.id, limit=limit, offset=offset)
 
     # --- derived values ---------------------------------------------------
 

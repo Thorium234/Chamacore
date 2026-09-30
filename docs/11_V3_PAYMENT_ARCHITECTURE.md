@@ -160,6 +160,30 @@ For overall test counts (collected / active / deferred) see
 `docs/13_TEST_INVENTORY.md`. SQLite runs locally; native PostgreSQL
 concurrency and trigger paths are run by CI.
 
+## Provider-neutral acceptance matrix
+
+The matrix makes the cross-component financial outcomes explicit and protects
+against regressions when adding providers (`docs/14_GAP_ANALYSIS_AND_IMPROVEMENT_PLAN.md`
+P2#8). "Provider" here means whichever adapter is active (Daraja today; Jenga
+retained unregistered). Every case asserts **both payment state and the exact
+ledger effect**; a settlement is a confirmed contribution plus exactly one
+ledger posting (Cash debit / Share Capital credit) made as the system user.
+
+| # | Scenario | Payment state after | Ledger effect | Covered by |
+|---|----------|---------------------|---------------|------------|
+| 1 | Valid callback on an initiated attempt | event `PROCESSED`; attempt `SUCCEEDED`; linked intent `SUCCEEDED` | Linked contribution `CONFIRMED`; exactly one posting as system user | automated: `TestWebhookSuccess`, `TestWebhookMetrics`, `test_payment_settlement.py` |
+| 2 | Callback replay (same event id, same payload) | event `DEDUPLICATED`; no state change | None — no second posting | automated: `TestWebhookDuplicate` |
+| 3 | Duplicate event id with changed payload | event `DISAGREEMENT`; no state change | None — flagged for reconciliation | automated: `TestWebhookDuplicate`; `test_confirmation_same_trans_id_different_body_disagrees` |
+| 4 | Amount or currency mismatch | event `DISAGREEMENT`; no state change | None | automated: `TestWebhookSuccess`; `test_confirmation_pending_contrib_amount_mismatch_disagrees` |
+| 5 | Callback for an unknown attempt without a token | rejected (`WEBHOOK_REJECTED`); nothing stored | None | automated: webhook rejection tests |
+| 6 | Token callback for an unknown connection, or provider/environment mismatch | rejected (`WEBHOOK_REJECTED`); nothing stored | None | automated: webhook rejection tests |
+| 7 | Out-of-order callback with a pending/unknown normalized status | event `UNPROCESSABLE`; attempt and intent unchanged | None | automated: pending/unknown branch of `_apply_callback` |
+| 8 | Provider success arriving after a local timeout | non-terminal `TIMEOUT` attempt resolves through the SUCCEEDED transition; intent `SUCCEEDED` if `PROCESSING` | Linked contribution settles exactly once | documented — verify per provider (attempt must be resolvable by `provider_transaction_id`) |
+| 9 | Crash after inbox store, then re-delivery | first delivery stored `RECEIVED`; redelivery resumes and reaches `PROCESSED` | Exactly one ledger posting | automated: `TestWebhookRecovery::test_crashed_delivery_resumes_and_settles_exactly_once` |
+| 10 | Terminal-state replay after settlement | event `PROCESSED` (idempotent); attempt/intent unchanged | None — no second posting (ADR-019 idempotency) | automated: `TestWebhookRecovery` |
+| 11 | Failed callback on first attempt | event `PROCESSED`; attempt `FAILED`; intent stays `PROCESSING` (retry available) | None | automated: `TestWebhookFailedPayment::test_failed_callback_on_first_attempt` |
+| 12 | Manual reconciliation after a lost callback | operator re-delivers the same callback; event resumes to `PROCESSED` | Settles exactly once | automated + runbook: `scripts/reconcile_payment_events.py`, `docs/12_PRODUCTION_RUNBOOK.md` |
+
 ## Not implemented
 
 - Live provider sandbox integration tests (requires test credentials and

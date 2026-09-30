@@ -53,6 +53,49 @@ class Counter:
         return out
 
 
+class Gauge:
+    """A monotonically reporting current-value metric (Prometheus ``gauge``).
+
+    ``set``/``inc``/``dec`` update an in-process value; ``lines`` renders the
+    text exposition format like the other metric types.
+    """
+
+    def __init__(self, name: str, description: str, label_names: Sequence[str] = ()):
+        self.name = name
+        self.description = description
+        self.label_names = tuple(label_names)
+        self._lock = threading.Lock()
+        self._values: dict[tuple[str, ...], int | float] = {}
+
+    def set(self, value: int | float, label_values: Sequence[str] = ()) -> None:
+        values = tuple(label_values)
+        with self._lock:
+            self._values[values] = value
+
+    def inc(self, amount: int = 1, label_values: Sequence[str] = ()) -> None:
+        values = tuple(label_values)
+        with self._lock:
+            self._values[values] = self._values.get(values, 0) + amount
+
+    def dec(self, amount: int = 1, label_values: Sequence[str] = ()) -> None:
+        self.inc(-amount, label_values)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._values.clear()
+
+    def lines(self) -> list[str]:
+        out = [
+            f"# HELP {self.name} {self.description}",
+            f"# TYPE {self.name} gauge",
+        ]
+        with self._lock:
+            items = sorted(self._values.items())
+        for values, value in items:
+            out.append(f"{self.name}{_format_labels(self.label_names, values)} {value}")
+        return out
+
+
 class Histogram:
     DEFAULT_BUCKETS = (
         0.005,
@@ -124,7 +167,7 @@ class Histogram:
 
 class MetricsRegistry:
     def __init__(self) -> None:
-        self._metrics: dict[str, Counter | Histogram] = {}
+        self._metrics: dict[str, Counter | Histogram | Gauge] = {}
         self._lock = threading.Lock()
 
     def counter(self, name: str, description: str, label_names: Sequence[str] = ()) -> Counter:
@@ -141,6 +184,17 @@ class MetricsRegistry:
         buckets: Sequence[float] = Histogram.DEFAULT_BUCKETS,
     ) -> Histogram:
         metric = Histogram(name, description, label_names, buckets)
+        with self._lock:
+            self._metrics[name] = metric
+        return metric
+
+    def gauge(
+        self,
+        name: str,
+        description: str,
+        label_names: Sequence[str] = (),
+    ) -> Gauge:
+        metric = Gauge(name, description, label_names)
         with self._lock:
             self._metrics[name] = metric
         return metric
@@ -172,6 +226,47 @@ http_request_duration_seconds = REGISTRY.histogram(
     "chamacore_http_request_duration_seconds",
     "HTTP handler latency in seconds by route template and method.",
     ("route", "method"),
+)
+
+# -- payment operations visibility (docs/14 P2#3) ---------------------------
+
+# Bounded-cardinality labels only (provider code, environment, controlled
+# outcome). Never label with user IDs, phone numbers, raw callback bodies,
+# transaction IDs, or secrets.
+
+payment_webhook_events_total = REGISTRY.counter(
+    "chamacore_payment_webhook_events_total",
+    "Provider callbacks classified by stored event outcome.",
+    ("provider", "environment", "outcome"),
+)
+
+payment_settlement_seconds = REGISTRY.histogram(
+    "chamacore_payment_settlement_seconds",
+    "Seconds from callback received_at to contribution settlement by provider and environment.",
+    ("provider", "environment"),
+)
+
+payment_events_stale_received = REGISTRY.gauge(
+    "chamacore_payment_events_stale_received",
+    "Provider callbacks currently stuck as RECEIVED past the recovery window "
+    "(refreshed by the reconciliation job).",
+)
+
+payment_intents_processing = REGISTRY.gauge(
+    "chamacore_payment_intents_processing",
+    "Payment intents currently in PROCESSING state (refreshed by the reconciliation job).",
+)
+
+payment_initiation_total = REGISTRY.counter(
+    "chamacore_payment_initiation_total",
+    "Payment initiation attempts by provider, environment, and attempt outcome.",
+    ("provider", "environment", "outcome"),
+)
+
+payment_validation_total = REGISTRY.counter(
+    "chamacore_payment_validation_total",
+    "Payment connection validation outcomes by provider and environment.",
+    ("provider", "environment", "outcome"),
 )
 
 

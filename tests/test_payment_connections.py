@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models.enums import PaymentEnvironment, PaymentProviderCode
+from app.services.audit import AuditService
 from tests.conftest import create_chama, register_and_login
 from tests.fake_provider import setup_fake_adapter, restore_fake_adapter
 
@@ -396,3 +397,100 @@ class TestList:
         )
         assert r.status_code == 200
         assert len(r.json()) == 1
+
+
+class TestAuditAtomicity:
+    """Business audit events share the connection-change transaction (P1#2).
+
+    If the audit write fails, the whole operation must roll back: a connection
+    change can never be committed without its payment_connection audit event.
+    """
+
+    def test_success_creates_payment_connection_audit(self, client, fake_jenga, db):
+        headers = _chair(client)
+        chama = create_chama(client, headers)
+        _create_pending_connection(client, headers, chama["id"])
+        from app.models.audit_event import AuditEvent
+
+        events = list(
+            db.scalars(
+                select(AuditEvent).where(AuditEvent.action == "payment_connection.created")
+            )
+        )
+        assert len(events) == 1
+        assert events[0].chama_id == uuid.UUID(chama["id"])
+
+    def test_delete_records_deleted_audit(self, client, fake_jenga, db):
+        headers = _chair(client)
+        chama = create_chama(client, headers)
+        conn = _create_pending_connection(client, headers, chama["id"])
+        r = client.delete(
+            f"/api/v1/chamas/{chama['id']}/payment-connections/{conn['id']}",
+            headers=headers,
+        )
+        assert r.status_code == 204
+        from app.models.audit_event import AuditEvent
+
+        events = list(
+            db.scalars(
+                select(AuditEvent).where(AuditEvent.action == "payment_connection.deleted")
+            )
+        )
+        assert len(events) == 1
+        assert events[0].resource_id == uuid.UUID(conn["id"])
+
+    def test_failed_audit_rolls_back_connection_create(self, client, fake_jenga, db, monkeypatch):
+        headers = _chair(client)
+        chama = create_chama(client, headers)
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("audit backend unavailable")
+
+        monkeypatch.setattr(AuditService, "record", _boom)
+        with pytest.raises(RuntimeError):
+            client.post(
+                f"/api/v1/chamas/{chama['id']}/payment-connections",
+                headers=headers,
+                json={
+                    "provider_code": JENGA,
+                    "environment": SANDBOX,
+                    "credentials": _jenga_credentials(),
+                },
+            )
+        db.rollback()
+        from app.models.audit_event import AuditEvent
+        from app.models.payment_connection import PaymentConnection
+        from app.models.payment_connection_audit import PaymentConnectionAudit
+
+        assert list(db.scalars(select(PaymentConnection))) == []
+        assert list(db.scalars(select(PaymentConnectionAudit))) == []
+        created_events = list(
+            db.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.action == "payment_connection.created",
+                    AuditEvent.chama_id == uuid.UUID(chama["id"]),
+                )
+            )
+        )
+        assert created_events == []
+
+    def test_failed_audit_rolls_back_disable(self, client, fake_jenga, db, monkeypatch):
+        headers = _chair(client)
+        chama = create_chama(client, headers)
+        conn_id = _create_pending_connection(client, headers, chama["id"])["id"]
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("audit backend unavailable")
+
+        monkeypatch.setattr(AuditService, "record", _boom)
+        with pytest.raises(RuntimeError):
+            client.post(
+                f"/api/v1/chamas/{chama['id']}/payment-connections/{conn_id}/disable",
+                headers=headers,
+            )
+        db.rollback()
+        from app.models.payment_connection import PaymentConnection
+
+        conn = db.get(PaymentConnection, uuid.UUID(conn_id))
+        assert conn is not None
+        assert conn.status.value == "PENDING_VALIDATION"

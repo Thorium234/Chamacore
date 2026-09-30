@@ -32,12 +32,16 @@ class MembershipRepository(BaseRepository):
         )
         return self.db.scalars(stmt).first()
 
-    def list_by_chama(self, chama_id: uuid.UUID) -> list[Membership]:
+    def list_by_chama(
+        self, chama_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+    ) -> list[Membership]:
         stmt = (
             select(Membership)
             .where(Membership.chama_id == chama_id)
             .order_by(Membership.membership_number)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
         return list(self.db.scalars(stmt))
 
     def allocate_membership_number(self, chama_id: uuid.UUID) -> int:

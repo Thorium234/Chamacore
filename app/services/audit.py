@@ -65,6 +65,7 @@ class AuditAction:
     PAYMENT_CONNECTION_ENABLED = "payment_connection.enabled"
     PAYMENT_CONNECTION_DISABLED = "payment_connection.disabled"
     PAYMENT_CONNECTION_CREDENTIALS_REPLACED = "payment_connection.credentials_replaced"
+    PAYMENT_CONNECTION_DELETED = "payment_connection.deleted"
     C2B_REGISTRATION = "c2b.registration"
 
 
@@ -134,8 +135,21 @@ class AuditService:
         self.db.commit()
         return event
 
-    def list_for_chama(self, *, actor: User, chama_id: uuid.UUID) -> list[AuditEvent]:
-        """Return the Chama's audit events (any active member may read)."""
+    def list_for_chama(
+        self,
+        *,
+        actor: User,
+        chama_id: uuid.UUID,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[AuditEvent]:
+        """Return the Chama's audit events (any active member may read).
+
+        ``limit`` may override the repository default of 200; a project may
+        page with ``limit``/``offset`` while keeping the plain-array contract.
+        """
         chama = get_chama_or_404(self.db, chama_id)
         authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
-        return self.audit.list_by_chama(chama.id)
+        return self.audit.list_by_chama(
+            chama.id, limit=limit if limit is not None else 200, offset=offset
+        )

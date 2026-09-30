@@ -11,6 +11,12 @@ Every inbound callback passes through a provider-neutral pipeline:
 6. parsing and storage of the raw payload under the retention policy,
 7. a safe state transition with amount matching and out-of-order handling.
 
+An event that was stored (step 6) but crashed before callback application
+(step 7) stays ``RECEIVED``; a provider redelivery resumes it instead of
+dropping it as a duplicate. Proof-of-dedup statuses are only assigned to
+deliveries whose processing already reached a terminal state, so recovery
+never runs a settlement a second time (ADR-019 is idempotent).
+
 Callbacks advance the payment attempt and intent state machines (ADR-016) and,
 when the intent carries a ``contribution_id`` and reaches SUCCEEDED, settle the
 linked contribution through the OQ-013 ledger posting path as the system user
@@ -27,6 +33,11 @@ from sqlalchemy.orm import Session
 from app.core.callback_utils import constant_time_equal, connection_callback_token, payload_hash
 from app.core.config import get_settings
 from app.core.errors import RateLimitError, WebhookRejectedError
+from app.core.metrics import (
+    payment_events_stale_received,
+    payment_settlement_seconds,
+    payment_webhook_events_total,
+)
 from app.core.ratelimit import RateLimiter
 from app.models.enums import (
     PaymentEnvironment,
@@ -52,6 +63,17 @@ _webhook_limiter = RateLimiter(get_settings().payment_webhook_per_minute_limit, 
 def check_webhook_rate_limit(key: str) -> None:
     if not _webhook_limiter.allow(key):
         raise RateLimitError("Too many webhook deliveries; try again shortly")
+
+
+def _record_webhook_outcome(connection, event: PaymentEvent) -> None:
+    """Count one stored callback delivery by bounded outcome labels."""
+    payment_webhook_events_total.inc(
+        (
+            connection.provider_code.value,
+            connection.environment.value,
+            event.status.value,
+        )
+    )
 
 
 class PaymentWebhookService:
@@ -86,6 +108,7 @@ class PaymentWebhookService:
             raise WebhookRejectedError("Callback verification failed")
 
         event = self._store_event(connection, parsed, raw_payload)
+        _record_webhook_outcome(connection, event)
         if event.status in (PaymentEventStatus.DEDUPLICATED, PaymentEventStatus.DISAGREEMENT):
             return event
         if event.status == PaymentEventStatus.UNPROCESSABLE:
@@ -97,9 +120,12 @@ class PaymentWebhookService:
             event.processed_at = datetime.now(timezone.utc)
             self.db.commit()
             self.db.refresh(event)
+            _record_webhook_outcome(connection, event)
             return event
 
-        return self._apply_callback(attempt, parsed, event)
+        event = self._apply_callback(attempt, parsed, event)
+        _record_webhook_outcome(connection, event)
+        return event
 
     # -- connection resolution ----------------------------------------------
 
@@ -163,6 +189,43 @@ class PaymentWebhookService:
 
     # -- storage and deduplication ------------------------------------------
 
+    def _resolve_duplicate(self, existing: PaymentEvent, digest: str) -> PaymentEvent:
+        """Classify a redelivery against a stored event.
+
+        A payload-hash mismatch is a ``DISAGREEMENT`` for reconciliation. A
+        stored event that never finished processing (still ``RECEIVED`` after
+        the inbox-store commit crashed) is returned as-is so the caller resumes
+        callback application; it is not marked ``DEDUPLICATED``. Every other
+        stored state already reached a terminal outcome and is deduplicated.
+        """
+        if existing.payload_hash != digest:
+            existing.status = PaymentEventStatus.DISAGREEMENT
+            existing.processed_at = datetime.now(timezone.utc)
+            self.db.commit()
+            self.db.refresh(existing)
+            return existing
+        if existing.status == PaymentEventStatus.RECEIVED:
+            return existing
+        existing.status = PaymentEventStatus.DEDUPLICATED
+        existing.processed_at = datetime.now(timezone.utc)
+        self.db.commit()
+        self.db.refresh(existing)
+        return existing
+
+    def list_stale_events(
+        self, *, older_than: datetime, limit: int = 100
+    ) -> list[PaymentEvent]:
+        """List callbacks stuck ``RECEIVED`` for operator recovery.
+
+        Bounded read-only visibility into deliveries whose processing crashed
+        after storage. These events are resumable: re-delivering them (or
+        clearing the upstream error) lets ``handle`` finish the callback. The
+        full (untruncated) stale count is also published as a gauge for the
+        ``/metrics`` scrape.
+        """
+        payment_events_stale_received.set(self.events.count_stale(older_than=older_than))
+        return self.events.list_stale(older_than=older_than, limit=limit)
+
     def _store_event(
         self, connection, parsed, raw_payload: bytes
     ) -> PaymentEvent:
@@ -173,17 +236,7 @@ class PaymentWebhookService:
                 connection.id, parsed.provider_event_id
             )
             if existing is not None:
-                if existing.payload_hash != digest:
-                    existing.status = PaymentEventStatus.DISAGREEMENT
-                    existing.processed_at = datetime.now(timezone.utc)
-                    self.db.commit()
-                    self.db.refresh(existing)
-                    return existing
-                existing.status = PaymentEventStatus.DEDUPLICATED
-                existing.processed_at = datetime.now(timezone.utc)
-                self.db.commit()
-                self.db.refresh(existing)
-                return existing
+                return self._resolve_duplicate(existing, digest)
 
         event = PaymentEvent(
             id=uuid.uuid4(),
@@ -208,15 +261,7 @@ class PaymentWebhookService:
                     connection.id, parsed.provider_event_id
                 )
             if existing is not None:
-                if existing.payload_hash != digest:
-                    existing.status = PaymentEventStatus.DISAGREEMENT
-                    existing.processed_at = datetime.now(timezone.utc)
-                else:
-                    existing.status = PaymentEventStatus.DEDUPLICATED
-                    existing.processed_at = datetime.now(timezone.utc)
-                self.db.commit()
-                self.db.refresh(existing)
-                return existing
+                return self._resolve_duplicate(existing, digest)
             raise
         self.db.refresh(event)
         if not parsed.is_parseable:
@@ -309,6 +354,18 @@ class PaymentWebhookService:
                 intent.last_transition_by_user_id = None
             if intent.contribution_id is not None:
                 settle_linked_contribution(self.db, payment_intent=intent)
+                if event.received_at is not None:
+                    received = event.received_at
+                    if received.tzinfo is None:
+                        received = received.replace(tzinfo=timezone.utc)
+                    latency = max((now - received).total_seconds(), 0.0)
+                    payment_settlement_seconds.observe(
+                        latency,
+                        (
+                            event.provider_code.value,
+                            event.environment.value,
+                        ),
+                    )
         else:
             attempt.status = PaymentAttemptStatus.FAILED
             attempt.completed_at = now

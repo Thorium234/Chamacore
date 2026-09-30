@@ -26,7 +26,12 @@ from app.services.access import (
     require_roles,
 )
 from app.services.audit import AuditAction, AuditService
-from app.services.finance import available_chama_cash, get_account_id, member_share_value
+from app.services.finance import (
+    available_chama_cash,
+    get_account_id,
+    lock_cash_account,
+    member_share_value,
+)
 from app.services.ledger import (
     CASH_CODE,
     PAYOUT_COMPLETION_SOURCE_TYPE,
@@ -140,6 +145,10 @@ class PayoutService:
 
         Idempotent: a retry returns the COMPLETED payout without a second
         financial effect (the ledger source is unique per payout).
+
+        The Chama's Cash ledger row is locked (``lock_cash_account``) before
+        the cash check, so concurrent completions/disbursements are serialized
+        and cannot collectively overspend the Chama's cash.
         """
         chama = get_chama_or_404(self.db, chama_id)
         actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
@@ -152,6 +161,7 @@ class PayoutService:
                 raise StateError("Completed payout is missing its ledger transaction")
             return payout
 
+        lock_cash_account(self.db, chama.id)
         self._transition(payout, (PayoutStatus.PROCESSING,), PayoutStatus.COMPLETED)
         if payout.amount > available_chama_cash(self.db, chama.id):
             raise StateError("Insufficient available Chama cash to complete this payout")
@@ -240,10 +250,12 @@ class PayoutService:
         self.db.commit()
         return payout
 
-    def list_by_chama(self, *, actor: User, chama_id: uuid.UUID) -> list[Payout]:
+    def list_by_chama(
+        self, *, actor: User, chama_id: uuid.UUID, limit: int | None = None, offset: int = 0
+    ) -> list[Payout]:
         chama = get_chama_or_404(self.db, chama_id)
         authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
-        return self.payouts.list_by_chama(chama.id)
+        return self.payouts.list_by_chama(chama.id, limit=limit, offset=offset)
 
     def _available_share_value(self, membership_id: uuid.UUID) -> Decimal:
         return member_share_value(self.db, membership_id) - self.payouts.completed_total_for_membership(

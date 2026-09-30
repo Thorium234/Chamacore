@@ -14,7 +14,10 @@ from app.models.enums import (
     PaymentProviderCode,
     ProviderTransactionStatus,
 )
+from app.models.ledger_transaction import LedgerTransaction
 from app.models.payment_event import PaymentEvent
+from app.services.ledger import CONTRIBUTION_SOURCE_TYPE
+from app.services.payment_webhook import PaymentWebhookService
 from tests.conftest import add_membership, create_chama, register_and_login
 from tests.fake_provider import (
     FakeAdapter,
@@ -241,6 +244,161 @@ class TestWebhookToken:
         body = _webhook_payload()
         r = client.post(url, content=json.dumps(body).encode(), headers={"content-type": "application/json"})
         assert r.status_code == 400
+
+
+def _linked_setup(client, fake_jenga, *, key="webhook-recovery-1", event=None):
+    headers, chama, member, conn, _, _ = _setup(client, fake_jenga)
+    r = client.post(
+        f"/api/v1/chamas/{chama['id']}/contributions",
+        headers=headers,
+        json={"membership_id": member["id"], "amount": "50.00", "period": "2026-09"},
+    )
+    assert r.status_code == 201, r.json()
+    contribution = r.json()
+    intent = client.post(
+        f"/api/v1/chamas/{chama['id']}/payment-intents",
+        headers=headers,
+        json={
+            "membership_id": member["id"],
+            "amount": "50.00",
+            "currency": "KES",
+            "purpose": "monthly contribution",
+            "idempotency_key": key,
+            "contribution_id": contribution["id"],
+        },
+    ).json()
+    attempt = client.post(
+        f"/api/v1/chamas/{chama['id']}/payment-intents/{intent['id']}/initiate",
+        headers=headers,
+        json={"connection_id": conn["id"]},
+    ).json()
+    return headers, chama, member, conn, intent, attempt, contribution
+
+
+class TestWebhookRecovery:
+    """A stored-but-unprocessed event resumes on redelivery (P1#1).
+
+    The inbox-store commits a ``RECEIVED`` event before callback application.
+    If the process crashes in that window the event must not be dropped as a
+    duplicate by the next delivery: it is resumed and settled exactly once.
+    """
+
+    def test_crashed_delivery_resumes_and_settles_exactly_once(
+        self, client, fake_jenga, db, monkeypatch
+    ):
+        headers, chama, member, conn, intent, attempt, contribution = _linked_setup(
+            client, fake_jenga
+        )
+        url = _callback_url(conn)
+        body = _webhook_payload(provider_request_id=attempt["provider_request_id"])
+
+        def _crash(*args, **kwargs):
+            raise RuntimeError("simulated crash after the inbox store committed")
+
+        monkeypatch.setattr(PaymentWebhookService, "_apply_callback", _crash)
+        with pytest.raises(RuntimeError):
+            client.post(url, content=json.dumps(body).encode(), headers={"content-type": "application/json"})
+
+        rows = list(db.scalars(select(PaymentEvent)))
+        assert len(rows) == 1
+        assert rows[0].status == PaymentEventStatus.RECEIVED
+
+        monkeypatch.undo()
+        r = client.post(url, content=json.dumps(body).encode(), headers={"content-type": "application/json"})
+        assert r.json()["event_status"] == "PROCESSED"
+
+        assert db.get(PaymentEvent, rows[0].id).status == PaymentEventStatus.PROCESSED
+        from app.models.contribution import Contribution
+
+        assert (
+            db.get(Contribution, uuid.UUID(contribution["id"])).status.value == "CONFIRMED"
+        )
+        postings = list(
+            db.scalars(
+                select(LedgerTransaction).where(
+                    LedgerTransaction.source_type == CONTRIBUTION_SOURCE_TYPE
+                )
+            )
+        )
+        assert len(postings) == 1
+        assert len(db.scalars(select(PaymentEvent)).all()) == 1
+
+    def test_crashed_received_then_contradictory_payload_disagrees(
+        self, client, fake_jenga, db, monkeypatch
+    ):
+        headers, chama, member, conn, intent, attempt, contribution = _linked_setup(
+            client, fake_jenga, key="webhook-recovery-2"
+        )
+        url = _callback_url(conn)
+        body1 = _webhook_payload(
+            provider_event_id="EVT-CRASHED",
+            provider_request_id=attempt["provider_request_id"],
+            amount="50.00",
+        )
+
+        def _crash(*args, **kwargs):
+            raise RuntimeError("simulated crash")
+
+        monkeypatch.setattr(PaymentWebhookService, "_apply_callback", _crash)
+        with pytest.raises(RuntimeError):
+            client.post(url, content=json.dumps(body1).encode(), headers={"content-type": "application/json"})
+        monkeypatch.undo()
+
+        body2 = _webhook_payload(
+            provider_event_id="EVT-CRASHED",
+            provider_request_id=attempt["provider_request_id"],
+            amount="999.00",
+        )
+        r = client.post(url, content=json.dumps(body2).encode(), headers={"content-type": "application/json"})
+        assert r.json()["event_status"] == "DISAGREEMENT"
+
+
+class TestWebhookMetrics:
+    """Payment-observability hooks (docs/14 P2#3)."""
+
+    def test_successful_linked_callback_records_outcome_and_settlement_latency(
+        self, client, fake_jenga, db
+    ):
+        from app.core.metrics import REGISTRY
+
+        headers, chama, member, conn, intent, attempt, contribution = _linked_setup(
+            client, fake_jenga, key="webhook-metrics-1"
+        )
+        url = _callback_url(conn)
+        body = _webhook_payload(provider_request_id=attempt["provider_request_id"])
+        r = client.post(url, content=json.dumps(body).encode(), headers={"content-type": "application/json"})
+        assert r.status_code == 200
+        assert r.json()["event_status"] == "PROCESSED"
+
+        from app.models.contribution import Contribution
+
+        assert (
+            db.get(Contribution, uuid.UUID(contribution["id"])).status.value == "CONFIRMED"
+        )
+
+        rendered = REGISTRY.render()
+        assert (
+            'chamacore_payment_webhook_events_total{provider="JENGA",environment="SANDBOX",outcome="PROCESSED"} 1'
+            in rendered
+        )
+        assert (
+            'chamacore_payment_settlement_seconds_count{provider="JENGA",environment="SANDBOX"} 1'
+            in rendered
+        )
+
+    def test_linked_setup_initiation_counter_records_attempt_outcomes(
+        self, client, fake_jenga
+    ):
+        from app.core.metrics import REGISTRY
+
+        headers, chama, member, conn, intent, attempt, contribution = _linked_setup(
+            client, fake_jenga, key="webhook-metrics-2"
+        )
+        rendered = REGISTRY.render()
+        assert (
+            'chamacore_payment_initiation_total{provider="JENGA",environment="SANDBOX",outcome="INITIATED"} 2'
+            in rendered
+        )
 
 
 class TestWebhookFailedPayment:

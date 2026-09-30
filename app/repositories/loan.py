@@ -17,20 +17,28 @@ class LoanRepository(BaseRepository):
             .where(Loan.id == loan_id)
         ).first()
 
-    def list_by_chama(self, chama_id: uuid.UUID) -> list[Loan]:
+    def list_by_chama(
+        self, chama_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+    ) -> list[Loan]:
         stmt = (
             select(Loan)
             .options(selectinload(Loan.repayments))
             .where(Loan.chama_id == chama_id)
             .order_by(Loan.created_at, Loan.id)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
         return list(self.db.scalars(stmt))
 
-    def list_by_membership(self, membership_id: uuid.UUID) -> list[Loan]:
+    def list_by_membership(
+        self, membership_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+    ) -> list[Loan]:
         stmt = (
             select(Loan)
             .options(selectinload(Loan.repayments))
             .where(Loan.membership_id == membership_id)
             .order_by(Loan.created_at, Loan.id)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
         return list(self.db.scalars(stmt))

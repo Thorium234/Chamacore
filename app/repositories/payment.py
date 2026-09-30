@@ -1,11 +1,17 @@
 """Repositories for the V3 payment domain (ADR-016)."""
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.enums import PaymentEnvironment, PaymentProviderCode
+from app.models.enums import (
+    PaymentEnvironment,
+    PaymentEventStatus,
+    PaymentIntentStatus,
+    PaymentProviderCode,
+)
 from app.models.payment_attempt import PaymentAttempt
 from app.models.payment_connection import PaymentConnection
 from app.models.payment_event import PaymentEvent
@@ -42,12 +48,16 @@ class PaymentConnectionRepository(BaseRepository):
             )
         ).first()
 
-    def list_by_chama(self, chama_id: uuid.UUID) -> list[PaymentConnection]:
+    def list_by_chama(
+        self, chama_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+    ) -> list[PaymentConnection]:
         stmt = (
             select(PaymentConnection)
             .where(PaymentConnection.chama_id == chama_id)
             .order_by(PaymentConnection.provider_code, PaymentConnection.environment)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
         return list(self.db.scalars(stmt))
 
 
@@ -70,13 +80,26 @@ class PaymentIntentRepository(BaseRepository):
             )
         ).first()
 
-    def list_by_chama(self, chama_id: uuid.UUID) -> list[PaymentIntent]:
+    def list_by_chama(
+        self, chama_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+    ) -> list[PaymentIntent]:
         stmt = (
             select(PaymentIntent)
             .where(PaymentIntent.chama_id == chama_id)
             .order_by(PaymentIntent.created_at.desc(), PaymentIntent.id.desc())
         )
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
         return list(self.db.scalars(stmt))
+
+    def count_by_status(self, status: PaymentIntentStatus) -> int:
+        """Global count of intents in one status (bounded observability signal)."""
+        stmt = (
+            select(func.count())
+            .select_from(PaymentIntent)
+            .where(PaymentIntent.status == status)
+        )
+        return int(self.db.scalar(stmt) or 0)
 
 
 class PaymentAttemptRepository(BaseRepository):
@@ -155,3 +178,34 @@ class PaymentEventRepository(BaseRepository):
                 PaymentEvent.provider_event_id == provider_event_id,
             )
         ).first()
+
+    def list_stale(
+        self, *, older_than: datetime, limit: int = 100
+    ) -> list[PaymentEvent]:
+        """List callbacks stuck in ``RECEIVED`` past ``older_than``.
+
+        These events were stored but their callback application never
+        finished; re-delivery resumes them (see PaymentWebhookService).
+        """
+        stmt = (
+            select(PaymentEvent)
+            .where(
+                PaymentEvent.status == PaymentEventStatus.RECEIVED,
+                PaymentEvent.received_at < older_than,
+            )
+            .order_by(PaymentEvent.received_at, PaymentEvent.id)
+            .limit(limit)
+        )
+        return list(self.db.scalars(stmt))
+
+    def count_stale(self, *, older_than: datetime) -> int:
+        """Total ``RECEIVED`` events older than ``older_than`` (untruncated)."""
+        stmt = (
+            select(func.count())
+            .select_from(PaymentEvent)
+            .where(
+                PaymentEvent.status == PaymentEventStatus.RECEIVED,
+                PaymentEvent.received_at < older_than,
+            )
+        )
+        return int(self.db.scalar(stmt) or 0)
