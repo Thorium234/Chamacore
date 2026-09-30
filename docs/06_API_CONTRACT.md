@@ -213,6 +213,18 @@ Status: `IMPLEMENTED`
 Waives a registration fee (sets status to WAIVED). Only `CHAIRPERSON`.
 Returns 200 with the updated fee.
 
+### Payment and payment history (ADR-022)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `POST` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/registration-fee/pay` | Records payment, marks the fee `PAID`, and posts DR Cash / CR Registration Fees. `CHAIRPERSON` or `TREASURER`. |
+| `POST` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/registration-fee/payment/reverse` | Reverses a paid fee payment with a compensating ledger transaction and restores `OWED`. `CHAIRPERSON`. |
+| `GET` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/registration-fee/payments` | Lists payment history. Requires Chama access. |
+
+Paying an already-paid fee is an idempotent no-op. Fee-payment posting uses
+the trusted ledger service and a database uniqueness constraint to prevent a
+second confirmed payment.
+
 ## Contributions
 
 ### `POST /api/v1/chamas/{chama_id}/contributions`
@@ -240,7 +252,9 @@ Returns 200. Returns 409 if not PENDING.
 
 Status: `IMPLEMENTED`
 
-Reverses a contribution. Only `CHAIRPERSON`. Deletes associated share records.
+Reverses a contribution. Only `CHAIRPERSON`. The contribution is marked
+`REVERSED`; its ledger effect is corrected by a compensating transaction.
+Historical share rows are not physically deleted.
 Returns 200. Returns 409 if not CONFIRMED.
 
 ## Shares
@@ -521,6 +535,58 @@ and carry that connection's callback token. Safaricom requires the URLs to be
 public and HTTPS in production. A provider rejection is surfaced as
 `400 INVALID_STATE` with the provider's error code in the message. Returns
 `403` for non-chairpersons.
+
+## Loans and repayments (ADR-020)
+
+All routes require authentication and Chama-scoped authorization. Loan
+eligibility, status transitions, and role checks are enforced by the service.
+See ADR-020 for full business rules and ledger postings.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `POST` | `/api/v1/chamas/{chama_id}/loans` | Apply for a loan; `201`; body `LoanApplyRequest`. |
+| `GET` | `/api/v1/chamas/{chama_id}/loans` | List Chama loans. |
+| `GET` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/loans` | List loans for a membership. |
+| `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/submit` | Submit a draft application. |
+| `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/approve` | Approve an eligible application; chairperson, applicant cannot self-approve. |
+| `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/reject` | Reject an application; optional `LoanRejectRequest` note. |
+| `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/cancel` | Cancel an approved, not-yet-disbursed loan. |
+| `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/disburse` | Disburse an approved loan and post atomically to the ledger. |
+| `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments` | Record repayment; `201`; body `LoanRepaymentCreate`. |
+| `GET` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments` | List repayment history. |
+| `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments/{repayment_id}/reverse` | Reverse a repayment with a compensating ledger posting; optional note. |
+
+The member applies; chairperson actions approve, reject, cancel, and disburse.
+A chairperson or treasurer records repayment; only a chairperson reverses one.
+Limits, derived balances, and repayment allocation are defined by ADR-020.
+
+## Payouts (ADR-021)
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `POST` | `/api/v1/chamas/{chama_id}/payouts` | Request payout; `201`; body `PayoutRequestCreate`. |
+| `GET` | `/api/v1/chamas/{chama_id}/payouts` | List Chama payouts. |
+| `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/approve` | Approve request; chairperson, requester cannot self-approve. |
+| `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/reject` | Reject request; chairperson. |
+| `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/process` | Mark payout processing; chairperson or treasurer. |
+| `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/complete` | Complete and atomically post the ledger transaction; chairperson or treasurer. |
+| `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/fail` | Mark processing payout failed; body `PayoutFailRequest` with required reason. |
+| `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/reverse` | Reverse a completed payout using a compensating ledger transaction. |
+
+An active member may request within the share-value and available-cash limits.
+Payout status alone is not proof of settlement; ledger effects are posted on
+completion (ADR-021).
+
+## Business audit events (ADR-023)
+
+### `GET /api/v1/chamas/{chama_id}/audit-events`
+
+Status: `IMPLEMENTED`
+
+Returns append-only business audit events for the Chama to an active member.
+Events are separate from application logs and ledger transactions. No public
+write, update, or delete endpoints exist. Audit metadata must not contain
+passwords, tokens, secrets, or payment credentials.
 
 ## API rules
 

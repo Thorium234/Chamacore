@@ -118,11 +118,12 @@ Only rules marked `APPROVED` may be implemented.
 - No public endpoint writes to the ledger; only the trusted posting service
   posts, after an approved business action (ADR-012, ADR-013).
 
-### Default chart of accounts (OQ-012 / ADR-019)
+### Default chart of accounts (OQ-012 / ADR-019 / ADR-020)
 
-- Each Chama is seeded with exactly three accounts, idempotently per
-  `(chama_id, code)`: `1000` Cash (ASSET), `3000` Share Capital (EQUITY),
-  `4000` Registration Fees (REVENUE). Further account creation is a future
+- Each Chama is seeded with exactly five approved accounts, idempotently per
+  `(chama_id, code)`: `1000` Cash (ASSET), `1100` Loans Receivable (ASSET),
+  `3000` Share Capital (EQUITY), `4000` Registration Fees (REVENUE), and
+  `5000` Interest Income (REVENUE). Further account creation requires a future
   business decision.
 
 ### Contribution-to-ledger posting (ADR-014, OQ-013)
@@ -131,7 +132,8 @@ Only rules marked `APPROVED` may be implemented.
   debit `1000` Cash, credit `3000` Share Capital — idempotent by
   `CONTRIBUTION_CONFIRMATION:<contribution_id>`.
 - Reversing a `CONFIRMED` contribution posts a compensating reversal
-  (ADR-011). Reversal rules for other flows are pending their open questions.
+  (ADR-011). Reversal rules for registration-fee payments, loan repayments,
+  and completed payouts are defined in ADR-020..ADR-022.
 
 ### Money precision (ADR-013)
 
@@ -193,9 +195,61 @@ Only rules marked `APPROVED` may be implemented.
   unset); production builds send `X-Content-Type-Options`, `Referrer-Policy`,
   and `Strict-Transport-Security` headers.
 
-### Not approved (blocked)
+### Registration-fee settlement (ADR-022)
 
-No rule exists for registration-fee payment accounting (OQ-014), loan
-eligibility/limits/interest/schedules (OQ-015..OQ-018), or payouts
-(OQ-019..OQ-020). These rules must be decided and recorded in the ADRs before
-any implementation. Unresolved decisions must not be guessed.
+- A registration fee begins `OWED`; an `OWED` fee may be waived or paid.
+- A fee payment requires `CHAIRPERSON` or `TREASURER`, records one confirmed
+  payment, marks the fee `PAID`, and posts DR `1000` Cash / CR `4000`
+  Registration Fees through the trusted ledger service.
+- Paying an already-paid fee is an idempotent no-op. At most one confirmed
+  payment may exist for a fee.
+- Reversing a paid fee payment requires `CHAIRPERSON`, posts a compensating
+  ledger reversal, marks the payment reversed, and restores the fee to `OWED`.
+- Waiving an `OWED` fee posts no ledger transaction. A `PAID` fee cannot be
+  waived.
+
+### Loans and repayments (ADR-020)
+
+- A borrower needs an `ACTIVE` membership held for at least 30 days.
+- Principal is capped at three times the member's active share value and at
+  available Chama cash, derived from the ledger Cash account.
+- Interest is a flat 5% service charge, calculated at disbursement. Terms are
+  3–12 whole months; repayments may be early or partial.
+- Repayments apply to outstanding interest first, then principal. Overpayment
+  is rejected; there are no automatic late penalties. Overdue state is derived
+  from maturity date and a positive balance.
+- Outstanding principal and interest are derived from confirmed, non-reversed
+  repayment rows rather than stored as mutable balances.
+- Apply: borrower; approve/reject/cancel/disburse: `CHAIRPERSON` (the applicant
+  cannot approve or reject their own loan); record repayment:
+  `CHAIRPERSON` or `TREASURER`; reverse repayment: `CHAIRPERSON`.
+- Disbursement posts DR `1100` Loans Receivable / CR `1000` Cash. Repayment
+  posts DR Cash / CR Loans Receivable (principal) and Interest Income
+  (interest). Reversal uses a compensating ledger transaction.
+
+### Payouts (ADR-021)
+
+- Any `ACTIVE` member may request a positive amount up to their outstanding
+  share value and available Chama cash, both derived from authoritative data.
+- `CHAIRPERSON` approves and cannot approve their own request.
+  `CHAIRPERSON` or `TREASURER` processes/completes a payout or records a
+  failure with a reason.
+- Completion posts DR `3000` Share Capital / CR `1000` Cash atomically with
+  the completed state. Reversal posts a compensating ledger transaction.
+- Payout business status alone does not represent financial settlement.
+
+### Business audit events (ADR-023)
+
+- Defined sensitive actions produce append-only business audit events,
+  separate from application logs and ledger transactions.
+- Events cannot be updated or deleted; metadata must not contain secrets,
+  tokens, passwords, or payment credentials.
+- Active Chama members can read events for their own Chama through the
+  Chama-scoped audit endpoint.
+
+### Remaining decisions
+
+The rules above were approved in ADR-020..ADR-023 and are implemented. Do not
+describe OQ-014..OQ-020 as open. Financial reporting definitions (D-07),
+notification scope (D-09), and reconciliation scope (D-10) remain unresolved;
+do not invent those features or their behavior.

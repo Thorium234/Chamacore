@@ -15,15 +15,15 @@ First read:
 - docs/decisions/OPEN_QUESTIONS.md
 - reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md
 
-Current truth: V1 (Chama Foundation), the non-decision-blocked V2 Financial
-Core, V3 Payments, and production readiness are implemented and tested. The
-governing development brief is `reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md`
-and its order of work has been defined in AGENTS.md and `docs/08_ROADMAP.md`.
+Current truth: V1, the V2 financial core (including registration-fee
+settlement, loans, repayments, and payouts), V3 Payments, the append-only
+business audit event system, and production-readiness work are implemented.
+The approved decisions are ADR-020..ADR-023. Follow `docs/08_ROADMAP.md` for
+current scope; financial reporting beyond ledger reads remains blocked on D-07,
+while notifications and reconciliation await ratified scope (D-09/D-10).
 
-Do not implement loans, loan repayments, payouts, registration-fee ledger
-payments, financial reporting beyond the existing ledger balances/entries, or
-the business audit trail: each is blocked by an open question or an
-undecided design (OQ-014..OQ-020), never guess those rules.
+Do not reimplement completed modules or invent additional financial behavior.
+For any unresolved decision, record the blocker and stop that portion of work.
 
 Do not rewrite the ledger, payment flows, ORM, framework, or architecture.
 Preserve the modular monolith and the API → schema → service → repository →

@@ -1,8 +1,9 @@
 # V2 — Financial Core — Design
 
-Status: Delivered for the non-decision-blocked scope (ADR-010..ADR-015 and the
-approved parts of ADR-019). Registration-fee payments, loans, loan repayments,
-and payouts remain blocked by open questions.
+Status: Delivered, including the approved financial workflows in ADR-020,
+ADR-021, and ADR-022. The ledger foundation and contribution/payment postings
+are defined in ADR-010..ADR-019. Audit events are defined separately in
+ADR-023.
 
 ## Goal
 
@@ -24,19 +25,21 @@ This increment delivers the **ledger foundation**, **V2 hardening**, and the
 - V2 hardening (ADR-015): composite FKs, DB triggers, partial unique index,
   quantization-before-validation, idempotency conflict handling, reversal
   metadata validation, account-type and non-blank CHECK constraints.
-- The default chart of accounts seeded per Chama (OQ-012 / ADR-019):
+- The default chart of accounts seeded per Chama (OQ-012 / ADR-019), extended
+  by ADR-020:
   `1000` Cash (ASSET), `3000` Share Capital (EQUITY), `4000` Registration Fees
-  (REVENUE), idempotent per `(chama_id, code)`; existing Chamas backfilled by
-  migration `f2b4d6a8e0c1`.
+  (REVENUE), `1100` Loans Receivable (ASSET), and `5000` Interest Income
+  (REVENUE), idempotent per `(chama_id, code)`.
 - Contribution-to-ledger posting (ADR-014, approved `2026-09-22`) and
   compensating reversal (ADR-011).
 - C2B Paybill intake, contribution settlement, and STK-push settlement
   (ADR-019, resolves OQ-012/OQ-013/OQ-021).
 - Tests, migrations, and dev-DB verification for the ledger.
 
-Registration-fee payments (OQ-014), loans, repayments, and payouts
-(OQ-015..OQ-020) are documented below but are **blocked** by open questions
-and are not implemented.
+Registration-fee settlement (ADR-022), loans and repayments (ADR-020), and
+payouts (ADR-021) are implemented. Their business rules, authorization,
+state transitions, and ledger effects are defined in those ADRs and
+`docs/03_BUSINESS_RULES.md`.
 
 ## What a financial transaction is
 
@@ -96,32 +99,32 @@ amount (`amount / SHARE_UNIT_PRICE`, ADR-005). Shares are a unit ledger
 concept, not money movement.
 
 The question of whether share records should also be represented as ledger
-entries is not decided (the OQ-012 decision seeds the three accounts above and
-does not address share-as-ledger representation).
+entries is not decided. The approved chart-of-accounts extensions in ADR-020
+do not define share units as additional ledger entries.
 
-## Registration fees, loans, repayments, and payouts
+## Implemented financial workflows (ADR-020..ADR-022)
 
-Registration-fee payments (OQ-014) and loans, repayments, and payouts are
-blocked. See open questions:
+- Registration-fee payment records transition a fee to `PAID` and post DR
+  Cash / CR Registration Fees. A chairperson can reverse a payment through a
+  compensating ledger transaction; the fee returns to `OWED` (ADR-022).
+- Loans use approved eligibility and amount limits, a controlled lifecycle,
+  5% flat service interest, 3–12 month terms, and interest-first repayment
+  allocation. Disbursement and repayments post through the ledger; repayments
+  can be reversed with compensating entries (ADR-020).
+- Payout requests are capped by outstanding share value and available cash.
+  Approval and processing are role-controlled; completion posts DR Share
+  Capital / CR Cash atomically, with compensating reversal for corrections
+  (ADR-021).
 
-| Area | Open questions | Blocked work |
-| --- | --- | --- |
-| Registration-fee payments | OQ-014 | fee payment feature, ledger postings |
-| Loan eligibility | OQ-015 | loan creation |
-| Loan principal limits | OQ-016 | loan creation |
-| Interest / service charges | OQ-017 | repayment math, ledger postings |
-| Repayment schedules | OQ-018 | schedules |
-| Late payments / defaults | OQ-018 | late handling |
-| Payout eligibility | OQ-019 | payout creation |
-| Payout approval / authorization | OQ-020 | payout API and postings |
+OQ-014..OQ-020 are resolved. Financial reporting definitions remain open
+under D-07; see `docs/decisions/OPEN_QUESTIONS.md`.
 
 ## Reversal and correction rules
 
-Approved at the ledger level (ADR-011): compensating transactions only. The
-business-level reversal rules applied so far: reversing a confirmed
-contribution posts a compensating reversal of its confirmation posting
-(ADR-014). Reversal rules for registration-fee payments, loans, and payouts
-are pending their open questions (OQ-014..OQ-020).
+Approved at the ledger level (ADR-011): compensating transactions only.
+Business-level corrections are defined for contribution confirmations
+(ADR-014), registration-fee payments (ADR-022), loan repayments (ADR-020),
+and completed payouts (ADR-021). Original posted ledger rows remain immutable.
 
 ## Idempotency requirements
 
@@ -251,12 +254,14 @@ No posting, reversal, or account-management endpoints are exposed publicly.
 6. Connect confirmed contributions to the ledger (ADR-014, OQ-013) including
    contribution settlement from C2B confirmation and succeeded STK payment
    intents (ADR-019, OQ-021) — **delivered**.
-7. Loans and repayments — **blocked** by OQ-015..OQ-018.
-8. Payouts — **blocked** by OQ-019 / OQ-020.
-9. Registration-fee payments on the ledger — **blocked** by OQ-014.
-10. General audit events for sensitive financial actions — later.
+7. Loans and repayments (ADR-020) — **delivered**.
+8. Payouts (ADR-021) — **delivered**.
+9. Registration-fee payments on the ledger (ADR-022) — **delivered**.
+10. General audit events for sensitive actions (ADR-023) — **delivered**.
+11. Financial reporting beyond ledger reads — blocked pending D-07.
 
 ## Explicitly marked unresolved
 
-Recorded in `docs/decisions/OPEN_QUESTIONS.md` (OQ-014..OQ-020). No
-unresolved business rule has been guessed.
+OQ-014..OQ-020 are resolved by ADR-020..ADR-022. Remaining reporting,
+notification, and reconciliation decisions are listed in
+`docs/decisions/OPEN_QUESTIONS.md`; no unresolved behavior should be guessed.

@@ -17,12 +17,15 @@ The long-term system is intended to support:
 
 ## Current status
 
-V1 (Chama Foundation) and V2 (Financial Core) are implemented: the immutable
-double-entry ledger, financial transaction history, V2 ledger hardening
-(composite FKs, append-only DB triggers, CHECK constraints, cursor
-pagination, idempotency conflict handling), chart-of-accounts seeding per
-Chama, and contribution-to-ledger posting with compensating reversals
-(ADR-014). V3 (Payment Architecture) is implemented: provider-port boundary,
+V1 (Chama Foundation), the V2 financial core, and V3 payment architecture are
+implemented. The V2 ledger is immutable and double-entry, with transaction
+history, enforcement hardening (composite FKs, append-only DB triggers, CHECK
+constraints, cursor pagination, idempotency conflict handling), chart-of-
+accounts seeding per Chama, and contribution-to-ledger posting with
+compensating reversals (ADR-014). Approved financial workflows for
+registration-fee settlement (ADR-022), loans and repayments (ADR-020),
+payouts (ADR-021), and append-only business audit events (ADR-023) were
+implemented on 2026-09-23. V3 (Payment Architecture) provides a provider-port boundary,
 Daraja adapter (Jenga code retained but not registered — Daraja is the only
 active provider), sealed payment connection lifecycle, payment intent/attempt
 state machines, C2B Paybill intake, STK/contribution settlement (ADR-019),
@@ -31,9 +34,8 @@ short-lived access tokens (120 minutes) with a rotating refresh-token flow,
 interactive docs and the raw OpenAPI schema disabled in production, `/metrics`
 protected by a shared token (404 otherwise), and minimal security headers in
 production builds. Ledger account balances and per-account entries are exposed
-read-only, always computed from posted entries. Of 307 automated tests, 280
-pass and 27 are deferred (skipped); native PostgreSQL concurrency and trigger
-paths are additionally run in CI.
+read-only, always computed from posted entries. The deferred-test inventory is
+documented in `docs/13_TEST_INVENTORY.md`; see CI for the current run results.
 
 ### Quick start
 
@@ -57,6 +59,7 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
 - Members and memberships (create, view, update status)
 - Roles (assign and remove leadership roles)
 - Registration fees (view, waive)
+- Registration-fee payments and reversals (ADR-022)
 - Contributions (record, confirm, reverse)
 - Shares (created automatically on confirmation per ADR-005)
 - Authorization on every Chama-scoped query
@@ -94,6 +97,13 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
   and confirmation-to-contribution settlement with ledger posting.
 - STK settlement (ADR-019): a succeeded payment intent settles its linked
   contribution as the system user, idempotently.
+- Loans and repayments (ADR-020): application, eligibility checks, approval,
+  disbursement, interest-first repayments, and compensating repayment
+  reversals; disbursements and repayments post through the ledger.
+- Payouts (ADR-021): request, approval, processing, completion, failure, and
+  reversal workflows with ledger posting on completion.
+- Business audit events (ADR-023): append-only events for defined sensitive
+  actions, readable by active Chama members through a Chama-scoped endpoint.
 - Authentication hardening (production-readiness brief 3.1, 3.6): access
   tokens default to a 120-minute lifetime with `expires_in` in the token
   response, a rotating single-use refresh-token flow
@@ -118,15 +128,11 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
   `Dockerfile` + Docker Compose app service, split runtime/dev dependency
   files with a pinned lockfile
 
-### Not implemented (V2+, blocked or deferred)
+### Not implemented or deferred
 
-- Registration-fee payments on the ledger (blocked by OQ-014)
-- Loans, loan repayments, payouts (blocked by OQ-015..OQ-020)
-- Aggregated reports/balances beyond the read-only ledger account balances
-  and per-account entries
-- Audit event table
-- Bank reconciliation
-- Notifications
+- Financial reports beyond ledger transaction history, account balances, and
+  account entries; report definitions remain open (D-07)
+- Bank reconciliation and notifications (scope/decision pending; D-09/D-10)
 - React, React Native, USSD
 - Background workers, microservices
 

@@ -59,9 +59,11 @@ at configuration load.
 
 Decision (2026-09-22): On Chama creation, seed exactly three ledger accounts —
 `1000` Cash (ASSET), `3000` Share Capital (EQUITY), and `4000` Registration
-Fees (REVENUE) — idempotently per `(chama_id, code)`. Existing Chamas are
-backfilled by migration `f2b4d6a8e0c1`. Any further account creation remains a
-future business decision. See ADR-019.
+Fees (REVENUE) — idempotently per `(chama_id, code)`. Existing Chamas were
+backfilled by migration `f2b4d6a8e0c1`. This initial chart was extended by
+ADR-020 on 2026-09-23 with `1100` Loans Receivable (ASSET) and `5000` Interest
+Income (REVENUE). The current default chart contains exactly these five
+accounts; adding further accounts requires a future business decision.
 
 ### OQ-013: Contribution posting accounts
 
@@ -92,21 +94,23 @@ intent/attempt state machine, and a deduplicated, append-only webhook inbox.
 All decisions are recorded in the three ADRs above; no V3 payment open
 questions remain.
 
-Connecting confirmed contributions to the ledger (OQ-012/OQ-013, resolved
-above), registration-fee payments (OQ-014), and loan, repayment, and payout
-flows (OQ-015..OQ-020) are the remaining V2 work and are not part of V3.
+Connecting confirmed contributions to the ledger (OQ-012/OQ-013),
+registration-fee payments (OQ-014), and loan, repayment, and payout flows
+(OQ-015..OQ-020) are V2 financial workflows and are separate from V3 payment
+provider architecture. They are implemented under ADR-014, ADR-019, and
+ADR-020..ADR-022.
 
 ### OQ-021: C2B (Paybill) payment intake and STK settlement
 
 Decision (2026-09-22): ADR-019. See also OQ-012/OQ-013 above, which the
 decision builds on.
 
-## Open (V2)
+## V2 financial decisions — resolved
 
-Phases 4 (financial reporting beyond the existing ledger balances/entries) and
-6 (business audit events) of the scale report are considered in the section
-below. OQ-014..OQ-020 are resolved by ADR-020..023; no V2 financial-domain open
-questions remain.
+OQ-014..OQ-020 and business audit scope D-08 are resolved by ADR-020..ADR-023.
+The remaining open items are financial-report definitions (D-07), notification
+scope (D-09), and reconciliation scope (D-10). These are not authorization to
+implement guessed behavior.
 
 ### OQ-014: Registration-fee payments and the ledger
 
@@ -154,34 +158,30 @@ self-approve; TREASURER/CHAIRPERSON process/complete; completion posts `DR`
 compensating entry; APPROVED payouts can be rejected; PROCESSING payouts can
 fail.
 
-## Open (backend completion spec — `reports/latestreport.md`)
+## Remaining open decisions
 
-`reports/latestreport.md` (CHAMACORE_BACKEND_COMPLETION_SPEC) requires the
-financial domain below. Its Phase 1 rule is: missing financial rules must be
-recorded here and decided, not guessed. The decisions the spec needs are the
-same as OQ-014..OQ-020 above, plus the chart-of-accounts and report/audit/
-notification/reconciliation definitions below. While any of these is OPEN,
-the corresponding scale-report step and completion-spec phase stays blocked.
+`reports/latestreport.md` (CHAMACORE_BACKEND_COMPLETION_SPEC) contains the
+original planned work. Financial-domain decisions D-01..D-06 and audit scope
+D-08 have since been ratified in ADR-020..ADR-023. Only D-07, D-09, and D-10
+remain open; their corresponding work stays blocked until decided.
 
-| # | Decision needed | Required by | Recommended default (pending ratification) |
+| # | Decision | Required by | Current disposition |
 | --- | --- | --- | --- |
-| D-01 | Loan eligibility and principal limit | OQ-015/OQ-016, spec §7 | ACTIVE membership with ≥1 month tenure; principal ≤ 3× member share value AND ≤ available Chama cash (ledger-derived) — **ratified, ADR-020** |
-| D-02 | Loan interest and repayment schedule | OQ-017/OQ-018, spec §7–§12 | Flat service interest 5% of principal; equal monthly installments over 3–12 months; no accrual before disbursement — **ratified, ADR-020** |
-| D-03 | Repayment allocation order and overpayments | spec §12 | Allocate interest first, then principal; overpayments rejected with 400; no automatic late penalties — **ratified, ADR-020** |
-| D-04 | Payout eligibility and approval | OQ-019/OQ-020, spec §13–§15 | Any ACTIVE member may request up to outstanding share value; CHAIRPERSON approves; requester cannot self-approve; completion posts DR membership equity / CR Cash — **ratified, ADR-021** |
-| D-05 | Registration-fee payment accounting | OQ-014, spec §16 | Fee status gains `PAID`; payment posts DR Cash / CR `4000` Registration Fees (idempotent); waived fees post nothing; no backfill migration — **ratified, ADR-022** |
-| D-06 | Loan/payout chart of accounts | OQ-012 ("further account creation is a future decision"), spec §10 | Add `1100` Loans Receivable (ASSET), `5000` Interest Income (REVENUE); payouts draw against `3000` Share Capital — **ratified, ADR-020** |
-| D-07 | Report definitions | spec §17 | Chama summary + member summary + ledger statements derived from posted entries only; loan/payout report fields added once those modules exist |
-| D-08 | Audit event scope | scale report step 9, spec §19–§21 | Record the spec §20 action list for existing operations as append-only events — **ratified, ADR-023** |
-| D-09 | Notification scope and channels | spec §25–§27 | Backend notification records for the spec §25 events; channel delivery deferred; deterministic keys `type:{entity_id}:{recipient_id}` |
-| D-10 | Reconciliation scope and matching | spec §22–§24 | Import statement rows; match against C2B/STK settlement records by amount+date+reference; states UNMATCHED/MATCHED/DISPUTED/RESOLVED/IGNORED; never writes the ledger directly |
+| D-01 | Loan eligibility and principal limit | OQ-015/OQ-016, spec §7 | Ratified and implemented — ADR-020 |
+| D-02 | Loan interest and repayment schedule | OQ-017/OQ-018, spec §7–§12 | Ratified and implemented — ADR-020 |
+| D-03 | Repayment allocation and overpayments | spec §12 | Ratified and implemented — ADR-020 |
+| D-04 | Payout eligibility and approval | OQ-019/OQ-020, spec §13–§15 | Ratified and implemented — ADR-021 |
+| D-05 | Registration-fee payment accounting | OQ-014, spec §16 | Ratified and implemented — ADR-022 |
+| D-06 | Loan/payout chart of accounts | OQ-012, spec §10 | Ratified and implemented — ADR-020 |
+| D-07 | Report definitions | spec §17 | Open; reporting beyond current ledger reads remains blocked |
+| D-08 | Audit event scope | scale report step 9, spec §19–§21 | Ratified and implemented — ADR-023 |
+| D-09 | Notification scope and channels | spec §25–§27 | Open; do not implement until ratified |
+| D-10 | Reconciliation scope and matching | spec §22–§24 | Open; do not implement until ratified |
 
 Phases 2–4 and 6 of the completion spec (loans, repayments, payouts,
-registration-fee settlement, and the business audit event system) are
-implemented following decisions D-01..D-08, recorded as ADR-020..023. Reports
-referencing the new keywords (D-07) follow phase 8. Notifications (D-09) and
-reconciliation (D-10) override an earlier DEFERRED note in AGENTS.md and
-therefore need explicit ratification.
+registration-fee settlement, and business audit events) are implemented under
+ADR-020..ADR-023. Phase 8 reporting remains blocked by D-07. Notifications
+(D-09) and reconciliation (D-10) remain deferred until ratified.
 
 ## Guiding rule (AGENTS.md)
 

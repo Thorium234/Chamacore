@@ -9,19 +9,22 @@ also read `reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md`.
 ## Current scope
 
 The governance version is `docs/08_ROADMAP.md`; the governing development
-brief is `reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md`. Its order of work:
+brief is `reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md`. The initial steps
+and approved financial-module implementation are complete; consult the
+roadmap for the remaining blocked work. The current order is:
 
-1. Repository consistency (docs must agree with reality) — done `2026-09-23`
+1. Repository consistency (docs must agree with reality) — completed
+   `2026-09-30`; update docs with future implementation changes
 2. Deferred-test inventory (every skip has a reason and an activation path)
    — done `2026-09-23`
-3. Financial domain decisions (registration fees, loans, repayments, payouts)
-4. Registration-fee accounting
-5. Loans
-6. Loan repayments
-7. Payouts
-8. Financial reporting
-9. Business audit trail
-10. Security hardening
+3. Financial domain decisions (ADR-020..ADR-023) — complete
+4. Registration-fee accounting (ADR-022) — complete
+5. Loans (ADR-020) — complete
+6. Loan repayments (ADR-020) — complete
+7. Payouts (ADR-021) — complete
+8. Financial reporting — blocked pending report definitions (D-07)
+9. Business audit trail (ADR-023) — complete
+10. Targeted security hardening
 11. Integration testing
 12. Performance measurement
 
@@ -38,6 +41,9 @@ brief is `reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md`. Its order of work:
   - Contribution confirmation/reversal ledger posting (ADR-014)
   - C2B/STK settlement posting (ADR-019, resolves OQ-012/OQ-013/OQ-021)
   - Read-only ledger account balances and per-account entries
+- Approved financial workflows (ADR-020..ADR-023): registration-fee
+  payment/reversal, loans and repayments, payouts, and append-only business
+  audit events. These workflows post financial effects through the ledger.
 - V3 Payment Architecture (ADR-016..ADR-018): provider port with the Daraja
   adapter active (Jenga retained but unregistered), payment connection
   lifecycle, intent/attempt state machines, deduplicated webhook inbox
@@ -45,17 +51,14 @@ brief is `reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md`. Its order of work:
   Implementation_Brief.md`): short access tokens with rotating refresh flow,
   docs/metrics gating, security headers, system-user login guard
 
-### NEXT WORK (blocked unless a decision is recorded)
+### NEXT WORK
 
-Steps 4–9 of the scale report are all decision-blocked. Do not guess them:
+Do not guess unresolved report, notification, or reconciliation rules:
 
-- Registration-fee payments on the ledger — blocked by OQ-014
-- Loans — blocked by OQ-015..OQ-018
-- Loan repayments — blocked by OQ-015..OQ-018
-- Payouts — blocked by OQ-019 / OQ-020
 - Financial reporting beyond the existing ledger balances/entries — blocked on
-  report definitions
-- Business audit events — blocked on which sensitive actions to record
+  report definitions (D-07)
+- Notifications and bank reconciliation — deferred pending ratified scope
+  (D-09 and D-10)
 
 ### DEFERRED
 

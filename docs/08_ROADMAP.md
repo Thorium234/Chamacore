@@ -2,104 +2,110 @@
 
 ## Governance
 
-`reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md` is the governing development
-brief. Its development order is: repository consistency, deferred-test
-inventory, financial domain decisions, registration-fee accounting, loans,
-loan repayments, payouts, financial reporting, business audit trail, security
-hardening, integration testing, performance measurement.
+This roadmap is the current implementation-status source of truth. The
+engineering principles and recommended sequence are in
+`reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md`; its older sections describe
+the work as it was planned before ADR-020..ADR-023. Those approved ADRs and
+this roadmap supersede any earlier statements that the financial modules
+remain blocked.
 
-Sections below use the status labels `COMPLETED`, `CURRENT`, `NEXT`,
-`DEFERRED`, and `OUT OF SCOPE`.
+Only approved business rules may be implemented. Do not guess missing rules.
 
 ## COMPLETED
 
 ### V1 — Chama Foundation
 
-- Users, chamas, members, memberships, roles, registration fees,
-  contributions, shares
-- Authentication, authorization, transactional membership numbers
-- Migrations, automated tests, V1 hardening (identity-claim uniqueness,
-  DB constraint backstops, government-ID masking, JWT secret fail-closed,
-  health/readiness)
+- Users, Chamas, members, memberships, roles, registration-fee obligations,
+  contributions, and shares.
+- Authentication, authorization, transactional membership numbers,
+  migrations, and V1 hardening (identity-claim uniqueness, database
+  constraint backstops, government-ID masking, JWT secret fail-closed,
+  health/readiness).
 
-### V2 — Financial Core (non-decision-blocked parts)
+### V2 — Financial Core
 
-- Immutable double-entry ledger + enforcement hardening (ADR-010..015)
-- Financial transaction history with cursor pagination
-- Chart-of-accounts seeding per Chama (OQ-012/ADR-019)
-- Contribution confirmation/reversal ledger posting (ADR-014)
-- C2B Paybill intake, contribution settlement, STK settlement (OQ-021/ADR-019)
-- Read-only ledger account balances and per-account entries
-- Round-trip money handling: `Decimal`, `NUMERIC(18,2)`, quantization
+- Immutable double-entry ledger, enforcement hardening, and cursor-paginated
+  financial transaction history (ADR-010..ADR-015).
+- Per-Chama chart of accounts: `1000` Cash, `3000` Share Capital, `4000`
+  Registration Fees, `1100` Loans Receivable, and `5000` Interest Income
+  (ADR-019, ADR-020).
+- Contribution confirmation and reversal posting (ADR-014).
+- Registration-fee payment and reversal (ADR-022).
+- Loan lifecycle, ledger-backed disbursement, repayments and compensating
+  repayment reversal (ADR-020).
+- Payout lifecycle, ledger-backed completion and compensating reversal
+  (ADR-021).
+- C2B Paybill and successful STK contribution settlement (ADR-019).
+- Read-only account balances and account entries derived from posted ledger
+  entries.
+- Append-only business audit events for the approved sensitive-action scope
+  (ADR-023).
+- Decimal-safe money handling using `Decimal` and `NUMERIC(18,2)`.
 
 ### V3 — Payment Architecture
 
-- Provider port, registry, Daraja adapter (ADR-016); Jenga retained but
-  unregistered
-- Payment connection lifecycle with AES-GCM sealed credentials (ADR-017)
-- Payment intent/attempt state machines
-- Deduplicated append-only webhook inbox (ADR-018)
-- Payment connections/intents/attempts API
+- Provider port and registry with Daraja active; Jenga code retained but
+  unregistered (ADR-016).
+- Payment connection lifecycle with sealed credentials (ADR-017).
+- Payment intent/attempt state machines and an append-only deduplicated
+  webhook inbox (ADR-018).
+- Payment connections, intents, attempts, STK, and C2B APIs.
 
-### Production readiness
+### Production readiness delivered
 
-- Short-lived access tokens (120 minutes) with rotating single-use refresh
-  flow and logout (brief `reports/ChamaCore_Developer_Implementation_Brief.md`)
-- Interactive docs/OpenAPI disabled in production; `/metrics` protected by
-  `CHAMACORE_METRICS_TOKEN`; production security headers
-- System posting account login guard, production runbook, Docker Compose
+- Short-lived access tokens with rotating single-use refresh tokens and
+  logout revocation.
+- Interactive API docs/OpenAPI disabled in production; `/metrics` protected
+  by `CHAMACORE_METRICS_TOKEN`; production security headers.
+- System posting account login guard, structured request-correlated logs,
+  rate limiting, production runbook, Dockerfile, and Docker Compose support.
 
 ## CURRENT
 
-Phases 2–4 and 6 of the scale-report backend completion spec (loans, loan
-repayments, payouts, registration-fee settlement, and the append-only
-business audit event system) are implemented as of `2026-09-23` following
-D-01..D-08 recorded in ADR-020..023. Next: finalize documentation updates and
-mark completed items.
+Documentation reconciliation for ADR-020..ADR-023 was completed on
+2026-09-30. Keep the API contract, business rules, database/architecture
+specifications, README, and status aligned with future implementation changes.
+No financial behavior is changed by that documentation work.
 
-## NEXT (decision-blocked)
+## NEXT
 
-Steps 4–9 of the scale report remaining (financial reporting beyond existing
-ledger balances/entries; notifications; reconciliation; security hardening;
-integration testing; performance measurement) remain decision-blocked except
-those implemented above. The items below remain blocked pending their recorded
-decisions:
-
-| Area | Blocked by | Status |
+| Area | Status | Reference |
 | --- | --- | --- |
-| Financial reporting beyond existing balances/entries | report definitions (D-07) | blocked |
-| Business audit events | covered (D-08/ADR-023) | completed |
-| Notifications | D-09 | blocked |
-| Bank reconciliation | D-10 | blocked |
-| Security hardening, integration testing, performance measurement | scale-report steps 10–12 | not started |
+| Financial reporting beyond ledger history, balances, and account entries | Blocked pending definitions | D-07 in `docs/decisions/OPEN_QUESTIONS.md` |
+| Notifications | Deferred; scope requires ratification | D-09 |
+| Bank reconciliation | Deferred; scope requires ratification | D-10 |
+| Targeted security hardening | Not started | Scale report, step 10 |
+| Broader PostgreSQL/provider integration testing | Follow-up; live provider tests need credentials | Scale report, step 11; `docs/13_TEST_INVENTORY.md` |
+| Performance measurement | Not started | Scale report, step 12 |
 
-OQ-014..OQ-020 are resolved by ADR-020..023.
+OQ-014..OQ-020 are resolved by ADR-020..ADR-022. D-08 audit scope is
+implemented by ADR-023. Do not describe those areas as blocked.
 
 ## DEFERRED
 
-- Jenga as an active provider (code and contract tests retained; see
-  `docs/13_TEST_INVENTORY.md`)
-- Live provider sandbox integration tests (needs test credentials)
-- Notifications, bank reconciliation, USSD, frontend, background workers
+- Activating Jenga as a provider; adapter code and contract tests are retained
+  but outside current provider scope (`docs/13_TEST_INVENTORY.md`).
+- Live Daraja/Jenga sandbox verification that requires provider credentials.
+- Notifications, bank reconciliation, and USSD until their scope is approved.
 
 ## OUT OF SCOPE
 
-- Microservices, Kubernetes, Kafka, distributed databases, event sourcing /
-  CQRS as replacements, Redis everywhere
-- Rewriting the ledger, payment flows, ORM, or framework
-- Extra payment providers without a documented requirement
+- Frontend implementation in this backend repository (the consumer UI lives
+  in the separate `frontend/chamacore-frontend` repository).
+- Microservices, Kubernetes, Kafka, distributed databases, event sourcing or
+  CQRS as replacements, Redis everywhere, or rewriting the ledger, ORM, or
+  framework without a concrete approved requirement.
+- Additional payment providers without a documented requirement.
 
-## Must not change
+## Must preserve
 
-- The modular monolith and its API → schema → service → repository → model
-  layering (scale report §18–19)
-- The ledger as the authoritative financial record (scale report §4)
-- Existing financial API semantics (additive changes only, scale report §21)
-- Historical ADRs and the migration history (scale report §3, §20)
+- The modular monolith and API → schema → service → repository → model layers.
+- The ledger as the authoritative financial record.
+- Existing financial API semantics; prefer additive changes.
+- Historical ADRs and migration history.
 
 ## Scope rule
 
-Only the current version in this roadmap plus the governing development brief
-may be implemented. Business rules not yet approved are recorded as open
-questions and must not be guessed. Implement only the current version in
-`docs/08_ROADMAP.md`.
+Implement only approved and current work in this roadmap. If a business rule
+is missing, record the open question, identify the blocked work, and wait for
+the decision instead of guessing.

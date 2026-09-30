@@ -2,7 +2,24 @@
 
 ## Status date
 
-2026-09-22
+2026-09-30
+
+## Current status (30 Sep 2026)
+
+V1, the non-decision-blocked V2 financial core, and V3 payments remain
+implemented. ADR-020..ADR-023 were approved and their corresponding
+registration-fee settlement, loan and repayment, payout, and business audit
+modules were implemented on 2026-09-23. Their API routers, services, models,
+migration, and feature tests are present. The older status notes below record
+the state at their own dates and are superseded where they conflict with this
+section and `docs/08_ROADMAP.md`.
+
+Financial reporting beyond ledger transactions, account balances, and account
+entries is still blocked pending D-07 report definitions. Notifications and
+bank reconciliation remain deferred pending ratified scope (D-09/D-10).
+Live payment-provider sandbox verification, targeted security hardening,
+broader integration testing, and performance measurement remain follow-up
+work; do not infer production readiness from unit or mocked contract tests.
 
 ## Status note (22 Sep 2026)
 
@@ -56,18 +73,19 @@ of the governing development order landed on `main`:
   `docs/05_ARCHITECTURE.md`, `docs/06_API_CONTRACT.md`, `docs/03_BUSINESS_
   RULES.md`, `docs/04_DATABASE.md`, `docs/09_GUIDE.md`, `docs/10_V2_FINANCIAL_
   CORE.md`, and `docs/11_V3_PAYMENT_ARCHITECTURE.md` now describe the same
-  current state (V1, V2 Financial Core, V3 Payments, and production readiness
-  complete; the financial domain steps 4–9 blocked on recorded decisions).
+  current state at that time (V1, V2 Financial Core, V3 Payments, and
+  production readiness complete). Subsequent financial-domain work is
+  recorded in ADR-020..ADR-023 and summarized in the current-status section.
   Historical ADRs and migration history were not rewritten.
 - **Step 2: deferred-test inventory.** `docs/13_TEST_INVENTORY.md` records
   every skipped test (27, all deferred Jenga adapter contract tests) with its
   reason, required environment, whether CI should run it, and its activation
   condition. Test categories (collected / active / deferred / failed) are
   reported below.
-- Steps 3–9 (financial domain decisions, registration-fee accounting, loans,
-  loan repayments, payouts, financial reporting, business audit trail) are
-  explicitly blocked on OQ-014..OQ-020 and undecided report/audit definitions;
-  no rules were guessed.
+- At the time of this 23 Sep note, the new ADR-020..ADR-023 modules had not
+  yet been reflected in this status file. They were approved and implemented
+  on 23 Sep; see the current-status section above. Financial-report
+  definitions remain open under D-07.
 
 ## Status note (17 Sep 2026)
 
@@ -120,9 +138,10 @@ resolves `BillRefNumber` to an ACTIVE membership on an ACTIVE connection, and
 confirmation creates and settles the contribution for the current period with
 its ledger posting.
 
-Loans, repayments, and payouts are blocked by open questions
-(OQ-014..OQ-020). Contribution-to-ledger posting (OQ-012/OQ-013) is
-implemented.
+At the time of this 22 Sep note, loans, repayments, payouts, and
+registration-fee settlement were blocked. ADR-020..ADR-023 subsequently
+resolved and implemented those workflows. Contribution-to-ledger posting
+(OQ-012/OQ-013) was already implemented.
 
 ## Currently executable
 
@@ -143,7 +162,8 @@ and are disabled in production.
 
 - Application package structure (`app/`)
 - Configuration via Pydantic settings
-- SQLAlchemy 2.x models (10 V1 tables + 3 V2 ledger tables + 6 V3 payment
+- SQLAlchemy 2.x models (V1 foundation, V2 ledger, V3 payments, refresh
+  tokens, and ADR-020..ADR-023 fee-payment, loan, repayment, payout, and audit
   tables)
 - Database sessions
 - Alembic migrations (initial V1 schema, V1 unique constraints, V2 ledger,
@@ -163,6 +183,8 @@ and are disabled in production.
   (`GET /chamas/{chama_id}/ledger/accounts[ /{account_id}/entries]`),
   always computed from posted entries, Chama-scoped (brief 4.2)
 - V2 compensating-entry reversal for the ledger
+- ADR-020..ADR-023 workflows: registration-fee settlement, loans and
+  repayments, payouts, and append-only business audit events
 - V2 hardening: composite FKs, append-only DB triggers, CHECK constraints,
   partial unique index for reversals, idempotency conflict handling,
   reversal metadata validation (ADR-015)
@@ -241,24 +263,22 @@ and are disabled in production.
 - PostgreSQL test target (Docker Compose + CI workflow)
 - Approved decisions recorded in ADRs and `docs/decisions/`
 
-## Not implemented (out of scope / blocked)
+## Not implemented or deferred (current)
 
-- Loans, loan repayments, payouts (blocked by OQ-015..OQ-020)
-- Registration-fee payments on the ledger (blocked by OQ-014)
+- Financial reporting beyond the existing ledger balances and entries
+  (definitions pending D-07)
+- Notifications and bank reconciliation (scope pending D-09/D-10)
 - Live Jenga/Daraja sandbox integration tests (requires live test accounts)
 - Frontend
-- Bank reconciliation
-- Reports beyond the read-only ledger account balances and per-account
-  entries
-- Notifications
 - USSD
 
 ## Current milestone
 
-V2 Financial Core: the ledger foundation, chart-of-accounts seeding,
-contribution-to-ledger posting, and C2B/STK settlement are implemented
-(ADR-014, ADR-019). Registration-fee payments (OQ-014), loans, repayments,
-and payouts await the remaining V2 financial decisions (OQ-014..OQ-020).
+V2 financial workflows now include registration-fee settlement (ADR-022),
+loans and repayments (ADR-020), and payouts (ADR-021), in addition to the
+ledger and contribution/payment settlement. The append-only business audit
+system is implemented under ADR-023. Financial reports beyond ledger reads,
+notifications, and reconciliation remain pending their documented decisions.
 
 ## Official status statement
 
@@ -284,8 +304,10 @@ and payouts await the remaining V2 financial decisions (OQ-014..OQ-020).
 > system-account login rejected cleanly, interactive docs/openapi disabled in
 > production, `/metrics` guarded by `CHAMACORE_METRICS_TOKEN`, minimal security
 > headers in production builds, read-only ledger account balances/entries
-> (brief 4.2), and the runbook C2B/checklist updates (brief 3.4). Tests:
-> 280 passed + 27 deferred (307 total).
+> (brief 4.2), and the runbook C2B/checklist updates (brief 3.4). On
+> 2026-09-23 the financial workflows and audit scope were approved and
+> implemented under ADR-020..ADR-023. The test inventory records collected
+> totals separately in `docs/13_TEST_INVENTORY.md`.
 
 Reports: `reports/03_V2LedgerReviewReport.md` (independent review findings),
 `reports/04_V2LedgerHardening.md` (evidence that findings were addressed),
@@ -296,5 +318,5 @@ re-review whose remaining technical items are implemented above),
 `reports/ChamaCore_Finalization_Report.md` (17 Sep finalization review whose
 implementable items — docs to HEAD, Daraja OAuth cache, seed script — are
 implemented above), and `reports/CHAMACORE_SCALE_ENGINEERING_REPORT.md` (the
-governing development brief; its Steps 1–2 are done, Steps 3–9 are
-decision-blocked).
+engineering brief; consult its 2026-09-30 status addendum and
+`docs/08_ROADMAP.md` for current work).

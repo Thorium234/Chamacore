@@ -3,12 +3,11 @@
 ## Style
 
 ChamaCore is a modular monolith: one FastAPI application and one primary
-database. This is a deliberate, durable decision (scale report §18): the
-modules below stay logically separate so future extraction is possible, but
-they are not separately deployed services.
+database. Modules are logically separated and may be extracted later if a
+measured need arises, but they are not separately deployed services.
 
-Do not rewrite the database layer, the ORM, or the framework. Do not replace
-the ledger with mutable balances.
+Do not rewrite the database layer, ORM, or framework. Do not replace the
+ledger with mutable balances.
 
 ## Layers
 
@@ -31,62 +30,72 @@ Database
 ```text
 app/
 ├── main.py                  # app factory, docs/metrics gating, security headers
-├── core/                    # config, security (JWT, refresh, hashing), logging, metrics,
-│                            # callback token derivation, rate limiting, error mapping
-├── db/                      # base, session, bootstrap (system user), ledger guards
-├── models/                  # SQLAlchemy models (V1 + V2 ledger + V3 payment + refresh tokens)
-├── providers/               # provider port (base.py) + HTTP, Daraja/Jenga adapters, registry
+├── core/                    # config, security, logging, metrics, rate limiting, errors
+├── db/                      # sessions, bootstrap, ledger/audit guards
+├── models/                  # identity, Chama, membership, ledger, payment, loan,
+│                            # repayment, payout, registration-fee, audit models
+├── providers/               # provider port, HTTP, Daraja/Jenga adapters, registry
 ├── schemas/                 # Pydantic input/output schemas
-├── repositories/
-├── services/                # business operations (auth, chama, membership, contribution,
-│                            # ledger, payment_connection, payment_intent, settlement, cipher)
+├── repositories/            # database access by domain
+├── services/                # business workflows by domain
 └── api/
-    ├── deps.py              # auth/rate-limit dependencies
-    └── v1/                  # routers: auth, chamas, memberships, roles, contributions,
-                             # shares, registration_fees, ledger, payments, webhooks, c2b
+    ├── deps.py              # authentication and rate-limit dependencies
+    └── v1/                  # auth, Chama, membership, roles, fees, contributions,
+                             # shares, ledger, loans, payouts, audit, payments,
+                             # webhooks, and C2B routers
 
 tests/
 alembic/
-scripts/                     # sandbox bootstrap + C2B registration helpers
+scripts/                     # Daraja sandbox bootstrap and C2B registration helpers
 ```
 
 ## Rules
 
-- Endpoints handle HTTP concerns.
-- Schemas validate external input and output.
-- Services contain business operations.
-- Repositories contain database access.
-- Models represent persistence.
-- Authorization runs before returning Chama-scoped data.
+- Endpoints handle HTTP concerns; schemas validate input/output.
+- Services contain business operations; repositories contain database access.
 - SQLAlchemy models are not returned directly from endpoints.
-- Business logic must not depend on a payment provider directly; it depends on
-  the provider port (`app/providers/base.py`, ADR-016).
+- Authorization runs before returning Chama-scoped data.
+- Business logic depends on the payment provider port, not a provider directly
+  (`app/providers/base.py`, ADR-016).
+- Financial workflows post through the trusted ledger service. The ledger is
+  the source of truth for balances and corrections.
 
-## Payment architecture (implemented)
+## Payment architecture
 
-V3 payments are implemented (ADR-016..ADR-018). Providers are adapters behind
-an internal interface; the rest of the system depends only on the port:
+V3 payment providers are adapters behind an internal interface:
 
 ```text
 Payment Service
-  ↓                  ProviderRegistry
+  ↓
 Provider Port (app/providers/base.py)
-  ├── DarajaAdapter      ← only registered adapter (sandbox + production)
+  ├── DarajaAdapter      ← registered provider (sandbox and production)
   └── JengaAdapter       ← code retained, not registered since 2026-09-17
 ```
 
-Payments are layered as: payment connections (sealed credentials, lifecycle,
-ADR-017) → payment intents (idempotent collection requests) → payment
-attempts (single STK Push calls) → provider_transactions (response tracking)
-→ payment_events (deduplicated inbound callback inbox, ADR-018). The system
-user (`system@chamacore.invalid`) performs system-triggered ledger postings
-(C2B confirmation and STK settlement, ADR-019).
+Payments use payment connections (sealed credentials and controlled lifecycle,
+ADR-017), payment intents, payment attempts, provider transactions, and a
+deduplicated callback inbox (ADR-018). The system user performs C2B and STK
+ledger settlement (ADR-019).
 
-## Observed boundaries
+## Implemented financial modules
 
-- Registration fees, loans, repayments, payouts, financial reports, and audit
-  events do not yet exist as modules; they are decision-blocked (see
-  `docs/08_ROADMAP.md`).
-- Do not let route handlers become business-logic containers when adding
+- Registration-fee payment and reversal (ADR-022).
+- Loan application, eligibility, approval, disbursement, repayment, and
+  repayment reversal (ADR-020).
+- Payout request, approval, processing, completion, failure, and reversal
+  (ADR-021).
+- Append-only business audit events for defined sensitive actions (ADR-023).
+
+These features remain in the modular monolith and preserve the API → schema →
+service → repository → model layering. Money effects post through the trusted
+ledger service; none of the modules maintains a competing balance.
+
+## Remaining boundaries
+
+- Financial reports beyond ledger history, account balances, and account
+  entries remain undefined pending D-07.
+- Notifications and bank reconciliation are not implemented; their scope is
+  pending ratified decisions D-09 and D-10.
+- Do not let route handlers become business-logic containers when extending
   features (scale report §19).
 - Do not bypass the ledger to create parallel accounting (scale report §4).

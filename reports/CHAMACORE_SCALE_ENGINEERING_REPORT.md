@@ -1,5 +1,27 @@
 # ChamaCore Engineering Scale Report
 
+## Implementation status addendum — 2026-09-30
+
+This report records engineering direction and the original completion plan.
+The status and development order in that original plan have been superseded
+where noted here and in `docs/08_ROADMAP.md`:
+
+- Repository consistency and deferred-test inventory are complete.
+- Financial decisions D-01..D-06 and D-08 were ratified and implemented by
+  ADR-020..ADR-023: registration-fee settlement, loans, repayments, payouts,
+  and append-only business audit events.
+- Financial reporting beyond existing ledger reads remains blocked pending
+  report definitions D-07.
+- Notifications (D-09) and bank reconciliation (D-10) remain deferred until
+  their scope is ratified.
+- Targeted security hardening, broader integration testing, and performance
+  measurement remain follow-up work.
+
+The detailed workflow requirements in this report are historical design
+context; the accepted ADRs are authoritative for the implemented workflows.
+Do not treat old statements below that call ADR-020..ADR-023 work "future",
+"missing", or "blocked" as current status.
+
 ## Purpose
 
 This document is a development report for the next stage of ChamaCore.
@@ -995,61 +1017,77 @@ A feature should be considered complete only when:
 
 # 30. Recommended Development Order
 
-The developer should work in this order.
+The original implementation sequence is retained below as history. Current
+status as of 2026-09-30 is:
 
-## Step 1: Repository consistency
+- Steps 1–2 (repository consistency and deferred-test inventory): complete.
+- Step 3 (financial decisions D-01..D-08): complete; see ADR-020..ADR-023.
+- Steps 4–7 and 9 (registration-fee settlement, loans, repayments, payouts,
+  and business audit events): implemented; see ADR-020..ADR-023.
+- Step 8 (financial reporting beyond ledger reads): blocked pending D-07.
+- Steps 10–12 (targeted security hardening, integration testing, performance
+  measurement): follow-up work; not marked complete here.
+- Notifications and reconciliation are deferred pending D-09 and D-10.
+
+## Historical sequence
+
+The following sections describe the plan before ADR-020..ADR-023 were
+approved. They remain useful as rationale and acceptance guidance; completed
+items are not outstanding work.
+
+### Step 1: Repository consistency
 
 Bring the documentation and actual implementation into agreement.
 
 Do not change business behavior during this step.
 
-## Step 2: Deferred test inventory
+### Step 2: Deferred test inventory
 
 Document every deferred test and determine which can be activated.
 
 Do not delete deferred tests.
 
-## Step 3: Financial domain decisions
+### Step 3: Financial domain decisions
 
 Resolve the remaining business questions for registration fees, loans,
 repayments, and payouts.
 
 Do not code around unresolved decisions.
 
-## Step 4: Registration fee accounting
+### Step 4: Registration fee accounting
 
 Complete the financial lifecycle.
 
-## Step 5: Loans
+### Step 5: Loans
 
 Implement the agreed lifecycle and accounting behavior.
 
-## Step 6: Repayments
+### Step 6: Repayments
 
 Implement allocation, settlement, idempotency, and accounting.
 
-## Step 7: Payouts
+### Step 7: Payouts
 
 Implement authorization, approval, settlement, failure handling, and
 accounting.
 
-## Step 8: Financial reporting
+### Step 8: Financial reporting
 
 Build reports from authoritative financial data.
 
-## Step 9: Business audit trail
+### Step 9: Business audit trail
 
 Add meaningful audit events for sensitive operations.
 
-## Step 10: Security hardening
+### Step 10: Security hardening
 
 Perform targeted security review against the completed workflows.
 
-## Step 11: Integration testing
+### Step 11: Integration testing
 
 Increase PostgreSQL and payment integration coverage.
 
-## Step 12: Performance measurement
+### Step 12: Performance measurement
 
 Measure real bottlenecks before introducing scaling infrastructure.
 

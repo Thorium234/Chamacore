@@ -2,9 +2,10 @@
 
 ## Status
 
-Implemented. V1, V2 (Financial Core), V3 (Payments) tables, and the
-`refresh_tokens` table are migrated. Initial V1 migration applied on SQLite
-for development; PostgreSQL is the production integration target.
+Implemented. V1, V2 (Financial Core), V3 (Payments), refresh-token, and the
+ADR-020..ADR-023 financial/audit tables are migrated. Initial V1 migration
+applied on SQLite for development; PostgreSQL is the production integration
+target.
 
 ## Strategy
 
@@ -39,6 +40,19 @@ for development; PostgreSQL is the production integration target.
 
 - `refresh_tokens` (only SHA-256 digests of refresh tokens; single-use,
   revocable) — migration `a1f0c3e5b7d9`
+
+### Approved financial workflows and audit (ADR-020..ADR-023)
+
+- `registration_fee_payments`
+- `loans`
+- `loan_repayments`
+- `payouts`
+- `audit_events`
+
+These tables are introduced by migration `9a8b7c6d5e4f` and are protected by
+the constraints and append-only rules documented in the relevant ADRs. Loan,
+repayment, payout, and registration-fee settlement postings use the existing
+ledger tables; they do not maintain parallel balances.
 
 ### V3 — Payments (ADR-016..ADR-018)
 
@@ -105,12 +119,12 @@ for development; PostgreSQL is the production integration target.
 
 ## Scope rule
 
-V1, the non-decision-blocked V2 Financial Core, V3 Payments, and the refresh
-token tables are implemented and migrated. Do not create loan,
-loan-repayment, payout, audit-event, or report tables (and do not extend the
-chart of accounts) until their approved ADR design exists. The V3 payment
-tables and C2B/STK settlement exist; loans, repayments, payouts, and audit
-remain blocked by OQ-014..OQ-020 and open design decisions.
+V1, the V2 financial core, V3 payments, refresh tokens, and the approved
+ADR-020..ADR-023 financial and audit modules are implemented and migrated.
+The chart of accounts includes the ADR-approved `1100` Loans Receivable and
+`5000` Interest Income accounts in addition to the original accounts. Do not
+add further accounts or tables for reports, notifications, or reconciliation
+without ratified business rules and a documented design.
 
 ## Migration history
 
@@ -123,3 +137,5 @@ remain blocked by OQ-014..OQ-020 and open design decisions.
 - `f2b4d6a8e0c1` — seed system user and default chart of accounts (OQ-012,
   ADR-019)
 - `a1f0c3e5b7d9` — refresh tokens table (production readiness 3.1)
+- `9a8b7c6d5e4f` — registration-fee payments, loans, repayments, payouts,
+  audit events, and approved account-seeding changes (ADR-020..ADR-023)
