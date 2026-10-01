@@ -263,6 +263,13 @@ Status: `IMPLEMENTED`
 Returns all contributions for a Chama. Any authorized member.
 Supports `limit`/`offset` (see "List collection endpoints").
 
+**Query parameters (filters, strategic plan W0):**
+- `membership_id` (UUID, optional) — restrict to one membership. 404 if the
+  membership is not in this Chama.
+- `period` (string, optional) — `YYYY-MM` (422 on another format).
+- `status` (enum, optional) — `PENDING`, `CONFIRMED`, or `REVERSED`
+  (422 on another value).
+
 ### `POST /api/v1/chamas/{chama_id}/contributions/{contribution_id}/confirm`
 
 Status: `IMPLEMENTED`
@@ -280,6 +287,13 @@ Historical share rows are not physically deleted.
 Returns 200. Returns 409 if not CONFIRMED.
 
 ## Shares
+
+### `GET /api/v1/chamas/{chama_id}/shares`
+
+Status: `IMPLEMENTED`
+
+Returns all share rows for a Chama (across memberships). Any authorized member.
+Supports `limit`/`offset` (see "List collection endpoints").
 
 ### `GET /api/v1/chamas/{chama_id}/memberships/{membership_id}/shares`
 

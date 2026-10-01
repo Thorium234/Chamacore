@@ -22,6 +22,21 @@ class ShareRepository(BaseRepository):
         )
         return list(self.db.scalars(stmt))
 
+    def list_by_chama(
+        self, chama_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+    ) -> list[Share]:
+        from sqlalchemy import select
+
+        stmt = (
+            select(Share)
+            .join(Share.membership)
+            .where(Share.membership.has(chama_id=chama_id))
+            .order_by(Share.created_at, Share.id)
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
+        return list(self.db.scalars(stmt))
+
     def create(
         self,
         *,

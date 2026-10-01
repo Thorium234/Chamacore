@@ -183,6 +183,31 @@ registration-fee settlement, and business audit events) are implemented under
 ADR-020..ADR-023. Phase 8 reporting remains blocked by D-07. Notifications
 (D-09) and reconciliation (D-10) remain deferred until ratified.
 
+## Strategic plan decisions (docs/15_STRATEGIC_PLAN.md)
+
+The strategic plan (`docs/15_STRATEGIC_PLAN.md`) was implemented only where
+the plan specifies a concrete rule. The deferred-test inventory (step 2) and
+repo consistency (step 1) pages are unaffected. Implemented decision-free
+items: **B1/W0** contribution list filters (`membership_id`, `period`,
+`status`), chama-wide shares list (`GET /chamas/{chama_id}/shares`), and
+**W4** canonical `2547…` member phone normalization (`app/core/phone.py`,
+applied on member write/lookup and shared with the Daraja STK adapter).
+
+| # | Decision | Required by | Current disposition |
+| --- | --- | --- | --- |
+| SP-1 | W1 identity schema: keep `users.email` nullable or add a `login_identifiers` table; login by email/phone/national ID | W1 auth | Open; do not guess the identity model |
+| SP-2 | W1 password policy thresholds (min length, complexity classes, common-password blocklist) and OTP config (TTL, single-use scope, delivery port) | W1 auth | Open; plan names the features but not the values |
+| SP-3 | W2 platform chama lifecycle: status states ("e.g."), reactivation rules, and the "operations only when ACTIVE / read-only when ON_HOLD" gating policy | W2 platform lifecycle | Open; plan states are examples ("e.g.") |
+| SP-4 | W2 platform-admin role: system-level role/auth mechanism, list/PATCH admin APIs | W2 platform lifecycle | Open; platform admin is not a Chama role |
+| SP-5 | W3 membership status transitions beyond ACTIVE/INACTIVE (ON_HOLD/TERMINATED), central permission matrix refactor, and manual-contribution `date` field semantics | W3 authz + CRUD | Open; new statuses contradict ADR-001 status set |
+| SP-6 | W4 explicit `payer_phone` on STK initiate ("if allowed") — who may override the intent phone | W4/W5 (B5) | Open; plan says "if allowed" without a rule |
+| SP-7 | W5 notifications: adopting the plan ratifies roadmap D-09 scope; schedule semantics (frequency/due day/amount) and outbox template/status enums still need approval | W5 (B7) | Open; aligns with roadmap deferred D-09 |
+| SP-8 | W6 statements PDF: aggregation/date-range rules, format, delivery (file vs signed URL) | W6 (B8) | Open; no report definitions approved |
+| SP-9 | W7 media: storage backend (object storage vs local disk), image constraints, URL signing | W7 (B8) | Open; no storage decision recorded |
+
+Each phase that depends on an SP decision stays blocked until the decision is
+ratified (AGENTS.md "No guessing").
+
 ## Guiding rule (AGENTS.md)
 
 If a decision is missing:

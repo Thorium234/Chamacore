@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.enums import ContributionStatus
 from app.models.user import User
+from app.schemas.common import Period
 from app.schemas.membership import ContributionCreate, ContributionOut, ContributionReverseRequest
 from app.services.contribution import ContributionService
 
@@ -57,12 +59,21 @@ def reverse_contribution(
 @router.get("/chamas/{chama_id}/contributions", response_model=list[ContributionOut])
 def list_contributions(
     chama_id: uuid.UUID,
+    membership_id: uuid.UUID | None = Query(default=None),
+    period: Period | None = Query(default=None),
+    status: ContributionStatus | None = Query(default=None),
     limit: int | None = Query(default=None, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
     contributions = ContributionService(db).list_by_chama(
-        actor=actor, chama_id=chama_id, limit=limit, offset=offset
+        actor=actor,
+        chama_id=chama_id,
+        limit=limit,
+        offset=offset,
+        membership_id=membership_id,
+        period=period,
+        status=status,
     )
     return [ContributionOut.model_validate(c) for c in contributions]

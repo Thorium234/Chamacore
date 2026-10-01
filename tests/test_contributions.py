@@ -298,6 +298,105 @@ class TestListContributions:
         assert r.status_code == 200
         assert len(r.json()) == 1
 
+    def test_list_filters_by_membership(self, client):
+        headers, chama, m = _setup_contributing_chama(client)
+        chair_membership_id = chama["membership_id"]
+        for period in ("2026-09", "2026-10"):
+            client.post(
+                f"/api/v1/chamas/{chama['id']}/contributions",
+                headers=headers,
+                json={"membership_id": m["id"], "amount": "1000.00", "period": period},
+            )
+        client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            json={"membership_id": chair_membership_id, "amount": "500.00", "period": "2026-09"},
+        )
+        r = client.get(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            params={"membership_id": m["id"]},
+        )
+        assert r.status_code == 200
+        assert {c["membership_id"] for c in r.json()} == {m["id"]}
+        assert len(r.json()) == 2
+
+    def test_list_filters_by_period(self, client):
+        headers, chama, m = _setup_contributing_chama(client)
+        for period in ("2026-09", "2026-10"):
+            client.post(
+                f"/api/v1/chamas/{chama['id']}/contributions",
+                headers=headers,
+                json={"membership_id": m["id"], "amount": "1000.00", "period": period},
+            )
+        r = client.get(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            params={"period": "2026-10"},
+        )
+        assert r.status_code == 200
+        assert len(r.json()) == 1
+        assert r.json()[0]["period"] == "2026-10"
+
+    def test_list_filters_by_status(self, client):
+        headers, chama, m = _setup_contributing_chama(client)
+        pending = client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            json={"membership_id": m["id"], "amount": "1000.00", "period": "2026-09"},
+        ).json()
+        confirmed = client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            json={"membership_id": m["id"], "amount": "2000.00", "period": "2026-10"},
+        ).json()
+        client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions/{confirmed['id']}/confirm", headers=headers
+        )
+        r = client.get(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            params={"status": "PENDING"},
+        )
+        assert r.status_code == 200
+        assert {c["id"] for c in r.json()} == {pending["id"]}
+        r = client.get(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            params={"status": "CONFIRMED"},
+        )
+        assert {c["id"] for c in r.json()} == {confirmed["id"]}
+
+    def test_list_invalid_period_rejected(self, client):
+        headers, chama, m = _setup_contributing_chama(client)
+        r = client.get(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            params={"period": "2026-13"},
+        )
+        assert r.status_code == 422
+
+    def test_list_invalid_status_rejected(self, client):
+        headers, chama, m = _setup_contributing_chama(client)
+        r = client.get(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            params={"status": "DEFUNCT"},
+        )
+        assert r.status_code == 422
+
+    def test_list_membership_from_another_chama_rejected(self, client):
+        headers_a = register_and_login(client, "chair-a@e.com")
+        chama_a = create_chama(client, headers_a, phone="+254700000811", govt="GID-811")
+        headers_b = register_and_login(client, "chair-b@e.com")
+        chama_b = create_chama(client, headers_b, phone="+254700000822", govt="GID-822")
+        r = client.get(
+            f"/api/v1/chamas/{chama_a['id']}/contributions",
+            headers=headers_a,
+            params={"membership_id": chama_b["membership_id"]},
+        )
+        assert r.status_code == 404
+
     def test_non_member_cannot_list(self, client):
         headers, chama, m = _setup_contributing_chama(client)
         client.post("/api/v1/auth/register", json={"email": "stranger@e.com", "password": "password123"})

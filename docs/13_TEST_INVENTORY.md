@@ -25,16 +25,16 @@ are not counted as evidence that a feature is fully protected.
 | Deferred (skipped) | 27 |
 | Failed | 0 |
 
-## Totals (2026-09-30)
+## Totals (2026-10-01)
 
-Updated after the docs/14 work (webhook recovery, payment-connection audit
-atomicity, financial concurrency, list pagination, and payment observability
-tests).
+Updated after the strategic-plan B1/W0 work (`docs/15_STRATEGIC_PLAN.md`):
+contribution list filters, chama-wide shares list, and canonical `2547…`
+member phone normalization (plan W4).
 
 | Category | Count |
 | --- | --- |
-| Collected | 375 |
-| Active (passing) | 346 |
+| Collected | 389 |
+| Active (passing) | 360 |
 | Deferred (skipped) | 29 |
 | Failed | 0 |
 
@@ -105,5 +105,5 @@ when the suite runs against PostgreSQL (CI).
   required environment, and activation condition in the same change.
 - Keep this inventory consistent with the test suite; run the collection check
   when touching tests:
-  `python -m pytest tests --collect-only -q` (375 collected as of 2026-09-30).
+  `python -m pytest tests --collect-only -q` (389 collected as of 2026-10-01).
 - Deferred counts do not count toward feature protection (scale report §12).

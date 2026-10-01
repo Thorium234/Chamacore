@@ -4,8 +4,9 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.phone import normalize_ke_msisdn
 from app.models.enums import ChamaStatus, RoleName
 from app.schemas.common import Money
 
@@ -15,6 +16,12 @@ class MemberDetails(BaseModel):
     last_name: str = Field(min_length=1, max_length=100)
     phone_number: str = Field(min_length=3, max_length=20)
     government_id: str = Field(min_length=1, max_length=50)
+
+    @field_validator("phone_number")
+    @classmethod
+    def _canonicalize_phone(cls, value: str) -> str:
+        """Store Kenyan numbers in canonical ``2547...`` form (plan W4)."""
+        return normalize_ke_msisdn(value)
 
 
 class MemberOut(BaseModel):

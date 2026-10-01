@@ -189,11 +189,28 @@ class ContributionService:
         return contribution
 
     def list_by_chama(
-        self, *, actor: User, chama_id: uuid.UUID, limit: int | None = None, offset: int = 0
+        self,
+        *,
+        actor: User,
+        chama_id: uuid.UUID,
+        limit: int | None = None,
+        offset: int = 0,
+        membership_id: uuid.UUID | None = None,
+        period: str | None = None,
+        status: ContributionStatus | None = None,
     ) -> list[Contribution]:
         chama = get_chama_or_404(self.db, chama_id)
         authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
-        return self.contributions.list_by_chama(chama.id, limit=limit, offset=offset)
+        if membership_id is not None:
+            get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
+        return self.contributions.list_by_chama(
+            chama.id,
+            limit=limit,
+            offset=offset,
+            membership_id=membership_id,
+            period=period,
+            status=status,
+        )
 
     def _find_open_contribution(self, membership_id: uuid.UUID, period: str) -> Contribution | None:
         stmt = select(Contribution).where(

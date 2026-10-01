@@ -13,7 +13,14 @@ class ContributionRepository(BaseRepository):
         return self.db.get(Contribution, contribution_id)
 
     def list_by_chama(
-        self, chama_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+        self,
+        chama_id: uuid.UUID,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+        membership_id: uuid.UUID | None = None,
+        period: str | None = None,
+        status: ContributionStatus | None = None,
     ) -> list[Contribution]:
         from sqlalchemy import select
 
@@ -23,6 +30,12 @@ class ContributionRepository(BaseRepository):
             .where(Contribution.membership.has(chama_id=chama_id))
             .order_by(Contribution.period, Contribution.created_at, Contribution.id)
         )
+        if membership_id is not None:
+            stmt = stmt.where(Contribution.membership_id == membership_id)
+        if period is not None:
+            stmt = stmt.where(Contribution.period == period)
+        if status is not None:
+            stmt = stmt.where(Contribution.status == status)
         if limit is not None:
             stmt = stmt.limit(limit).offset(offset)
         return list(self.db.scalars(stmt))

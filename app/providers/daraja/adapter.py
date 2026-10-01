@@ -33,6 +33,7 @@ from decimal import Decimal, InvalidOperation
 import httpx
 
 from app.core.config import get_settings
+from app.core.phone import normalize_ke_msisdn
 from app.models.enums import (
     PaymentEnvironment,
     PaymentProviderCode,
@@ -85,11 +86,7 @@ TOKEN_CACHE_TTL_SECONDS = 50 * 60
 
 def normalize_phone(raw: str) -> str:
     """Normalize a Kenyan phone to 2547XXXXXXXX (12 digits) form."""
-    digits = re.sub(r"\D", "", raw)
-    if digits.startswith("0"):
-        digits = "254" + digits[1:]
-    elif digits.startswith("7") or digits.startswith("1"):
-        digits = "254" + digits
+    digits = normalize_ke_msisdn(raw)
     if not re.fullmatch(r"2547\d{8}", digits):
         raise ProviderIntegrationError(
             "PHONE_FORMAT",
