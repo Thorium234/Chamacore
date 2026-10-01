@@ -234,3 +234,10 @@ alembic history
 
 After a successful reset, `alembic current` should report the latest revision (`head`).
 ```
+
+In the curent folder full list
+cd C:\Users\user\Desktop\programming\pybased\chamacore
+Remove-Item .\chamacore.db -ErrorAction SilentlyContinue
+# optional extras if they exist:
+Remove-Item .\chamacore.db-wal -ErrorAction SilentlyContinue
+Remove-Item .\chamacore.db-shm -ErrorAction SilentlyContinue
