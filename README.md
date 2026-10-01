@@ -41,7 +41,9 @@ documented in `docs/13_TEST_INVENTORY.md`; see CI for the current run results.
 
 ```bash
 python -m venv env
-source env/bin/activate     # macOS/Linux; on Windows (PowerShell): env\Scripts\activate
+source env/bin/activate     # macOS/Linux; on Windows (PowerShell):or .\.venv\Scripts\Activate.ps1
+ if scripts disabled run Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+ then rerun  else use this  env\Scripts\activate 
 pip install -r requirements.txt       # runtime; add requirements-dev.txt for tests
 pip install -r requirements.lock.txt  # optional: reproducible locked environment
 alembic upgrade head
