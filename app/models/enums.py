@@ -4,7 +4,12 @@ from enum import StrEnum
 
 
 class ChamaStatus(StrEnum):
+    """Chama lifecycle. INACTIVE is retained as a legacy alias of SUSPENDED."""
+
+    PENDING = "PENDING"
     ACTIVE = "ACTIVE"
+    SUSPENDED = "SUSPENDED"
+    DISSOLVED = "DISSOLVED"
     INACTIVE = "INACTIVE"
 
 
@@ -66,6 +71,11 @@ class RoleName(StrEnum):
     TREASURER = "TREASURER"
     SECRETARY = "SECRETARY"
     MEMBER = "MEMBER"
+    PLATFORM_ADMIN = "PLATFORM_ADMIN"
+
+
+class NotificationChannel(StrEnum):
+    IN_APP = "IN_APP"
 
 
 class LedgerAccountType(StrEnum):

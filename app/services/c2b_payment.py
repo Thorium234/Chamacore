@@ -208,6 +208,7 @@ class C2BPaymentService:
                 amount=parsed.amount,
                 period=period,
                 recorded_by_user_id=system_user_id(),
+                payment_date=None,
                 note=f"C2B {parsed.transaction_id}" if parsed.transaction_id else "C2B Paybill",
             )
         elif contribution.status == ContributionStatus.CONFIRMED and contribution.amount == parsed.amount:

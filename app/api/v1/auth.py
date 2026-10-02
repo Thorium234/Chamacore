@@ -14,7 +14,15 @@ from app.core.config import get_settings
 from app.core.errors import StateError
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.user import LogoutRequest, MemberLinkRequest, RefreshRequest, RegisterRequest, TokenOut, UserOut
+from app.schemas.user import (
+    ChangePasswordRequest,
+    LogoutRequest,
+    MemberLinkRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenOut,
+    UserOut,
+)
 from app.services.audit import AuditAction, AuditService
 from app.services.auth import AuthService
 
@@ -112,10 +120,30 @@ def me(actor: User = Depends(get_current_user)) -> User:
     return actor
 
 
+@router.post("/change-password", response_model=UserOut)
+def change_password(
+    data: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+    _rate_limit: None = Depends(check_token_rate_limit),
+) -> User:
+    try:
+        return AuthService(db).change_password(
+            user=actor,
+            current_password=data.current_password,
+            new_password=data.new_password,
+        )
+    except StateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message
+        )
+
+
 def _to_token_out(session: dict[str, str]) -> TokenOut:
     settings = get_settings()
     return TokenOut(
         access_token=session["access_token"],
         refresh_token=session["refresh_token"],
         expires_in=settings.jwt_expires_minutes * 60,
+        must_change_password=bool(session.get("must_change_password", False)),
     )

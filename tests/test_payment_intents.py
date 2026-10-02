@@ -71,17 +71,23 @@ def _scenario(client, fake_jenga):
     return headers, chama, member, r.json()
 
 
-def _create_intent(client, headers, chama_id, member_id, *, key="key-1", amount="50.00"):
+def _create_intent(
+    client, headers, chama_id, member_id, *, key="key-1", amount="50.00",
+    phone_number=None,
+):
+    payload = {
+        "membership_id": member_id,
+        "amount": amount,
+        "currency": "KES",
+        "purpose": "monthly contribution",
+        "idempotency_key": key,
+    }
+    if phone_number is not None:
+        payload["phone_number"] = phone_number
     r = client.post(
         f"/api/v1/chamas/{chama_id}/payment-intents",
         headers=headers,
-        json={
-            "membership_id": member_id,
-            "amount": amount,
-            "currency": "KES",
-            "purpose": "monthly contribution",
-            "idempotency_key": key,
-        },
+        json=payload,
     )
     assert r.status_code == 201, r.json()
     return r.json()
@@ -399,3 +405,81 @@ class TestIntentRead:
             headers=outsider,
         )
         assert r.status_code == 403
+
+
+class TestPromptPhone:
+    """Optional alternate prompt phone; settlement stays membership-bound."""
+
+    def test_prompt_phone_defaults_to_none(self, client, fake_jenga):
+        headers, chama, member, conn = _scenario(client, fake_jenga)
+        intent = _create_intent(client, headers, chama["id"], member["id"])
+        assert intent["requested_phone"] is None
+
+    def test_prompt_phone_is_normalized(self, client, fake_jenga):
+        headers, chama, member, conn = _scenario(client, fake_jenga)
+        intent = _create_intent(
+            client, headers, chama["id"], member["id"], phone_number="0712345678"
+        )
+        assert intent["requested_phone"] == "254712345678"
+
+    def test_prompt_phone_defaults_to_member_phone_on_initiate(
+        self, client, fake_jenga
+    ):
+        headers, chama, member, conn = _scenario(client, fake_jenga)
+        intent = _create_intent(client, headers, chama["id"], member["id"])
+        _initiate(client, headers, chama["id"], intent["id"], conn["id"])
+        assert fake_jenga.create_requests[-1].customer_phone == "254700000099"
+
+    def test_prompt_phone_used_for_initiation(self, client, fake_jenga):
+        headers, chama, member, conn = _scenario(client, fake_jenga)
+        intent = _create_intent(
+            client, headers, chama["id"], member["id"], phone_number="+254711111111"
+        )
+        _initiate(client, headers, chama["id"], intent["id"], conn["id"])
+        assert fake_jenga.create_requests[-1].customer_phone == "254711111111"
+
+    def test_prompt_phone_keeps_settlement_membership(self, client, fake_jenga):
+        """An alternate payer phone must not change who the payment settles for."""
+        headers, chama, member, conn = _scenario(client, fake_jenga)
+        intent = _create_intent(
+            client, headers, chama["id"], member["id"], phone_number="254711111111"
+        )
+        assert intent["membership_id"] == member["id"]
+
+    def test_same_key_different_prompt_phone_conflicts(self, client, fake_jenga):
+        headers, chama, member, conn = _scenario(client, fake_jenga)
+        _create_intent(
+            client, headers, chama["id"], member["id"], phone_number="254711111111"
+        )
+        r = client.post(
+            f"/api/v1/chamas/{chama['id']}/payment-intents",
+            headers=headers,
+            json={
+                "membership_id": member["id"],
+                "amount": "50.00",
+                "currency": "KES",
+                "purpose": "monthly contribution",
+                "idempotency_key": "key-1",
+                "phone_number": "254722222222",
+            },
+        )
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "CONFLICT"
+
+    def test_idempotent_repeat_with_same_prompt_phone(self, client, fake_jenga):
+        headers, chama, member, conn = _scenario(client, fake_jenga)
+        first = _create_intent(
+            client, headers, chama["id"], member["id"], phone_number="254711111111"
+        )
+        second = _create_intent(
+            client, headers, chama["id"], member["id"], phone_number="+254711111111"
+        )
+        assert second["id"] == first["id"]
+        assert second["requested_phone"] == "254711111111"
+
+    def test_blank_prompt_phone_treated_as_absent(self, client, fake_jenga):
+        headers, chama, member, conn = _scenario(client, fake_jenga)
+        intent = _create_intent(
+            client, headers, chama["id"], member["id"], phone_number="   "
+        )
+        assert intent["requested_phone"] is None

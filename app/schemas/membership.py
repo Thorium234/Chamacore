@@ -1,7 +1,7 @@
 """Pydantic schemas for memberships, roles, registration fees, contributions, and shares."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -72,6 +72,7 @@ class ContributionCreate(BaseModel):
     membership_id: uuid.UUID
     amount: PositiveMoney
     period: Period
+    payment_date: date | None = None
     note: str | None = Field(default=None, max_length=1000)
 
 
@@ -88,6 +89,7 @@ class ContributionOut(BaseModel):
     period: str
     status: str
     recorded_by_user_id: uuid.UUID
+    payment_date: date | None
     note: str | None
     confirmed_at: datetime | None
     created_at: datetime

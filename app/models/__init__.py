@@ -10,6 +10,7 @@ from app.models.enums import (
     LoanRepaymentStatus,
     LoanStatus,
     MembershipStatus,
+    NotificationChannel,
     PaymentAttemptStatus,
     PaymentCapability,
     PaymentConnectionAuditAction,
@@ -35,6 +36,7 @@ from app.models.member import Member
 from app.models.membership import Membership
 from app.models.membership_role import MembershipRole
 from app.models.membership_sequence import MembershipSequence
+from app.models.notification import Notification
 from app.models.payment_attempt import PaymentAttempt
 from app.models.payment_connection import PaymentConnection
 from app.models.payment_connection_audit import PaymentConnectionAudit
@@ -48,6 +50,7 @@ from app.models.registration_fee_payment import RegistrationFeePayment
 from app.models.role import Role
 from app.models.share import Share
 from app.models.user import User
+from app.models.user_platform_role import UserPlatformRole
 
 __all__ = [
     "AuditEvent",
@@ -68,6 +71,8 @@ __all__ = [
     "MembershipRole",
     "MembershipSequence",
     "MembershipStatus",
+    "Notification",
+    "NotificationChannel",
     "PaymentAttempt",
     "PaymentAttemptStatus",
     "PaymentCapability",
@@ -96,4 +101,5 @@ __all__ = [
     "Share",
     "ShareStatus",
     "User",
+    "UserPlatformRole",
 ]

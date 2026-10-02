@@ -52,3 +52,24 @@ def get_target_membership(db: Session, *, chama_id: uuid.UUID, membership_id: uu
     if membership is None or membership.chama_id != chama_id:
         raise NotFoundError("Membership not found in this Chama")
     return membership
+
+
+def is_platform_admin(db: Session, *, user: User) -> bool:
+    """Return True when the user holds the global PLATFORM_ADMIN grant.
+
+    ``PLATFORM_ADMIN`` is deliberately not a Chama role: it is stored on
+    ``user_platform_roles`` so a platform administrator does not have to be a
+    member of every Chama they oversee.
+    """
+    if not user.is_active:
+        return False
+    from app.repositories.user_platform_role import UserPlatformRoleRepository
+
+    return UserPlatformRoleRepository(db).has_role(
+        user_id=user.id, role=RoleName.PLATFORM_ADMIN
+    )
+
+
+def require_platform_admin(db: Session, *, user: User) -> None:
+    if not is_platform_admin(db, user=user):
+        raise PermissionDeniedError("This action requires the PLATFORM_ADMIN role")

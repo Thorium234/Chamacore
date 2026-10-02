@@ -10,8 +10,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.phone import normalize_ke_msisdn
 from app.models.enums import (
     PaymentAttemptStatus,
     PaymentConnectionStatus,
@@ -61,6 +62,19 @@ class PaymentIntentCreate(BaseModel):
     purpose: str = Field(min_length=1, max_length=255)
     idempotency_key: str = Field(min_length=1, max_length=255)
     contribution_id: uuid.UUID | None = None
+    phone_number: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=20,
+        description="Optional prompt phone (254 format). Defaults to the member's phone.",
+    )
+
+    @field_validator("phone_number")
+    @classmethod
+    def _normalize_prompt_phone(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return normalize_ke_msisdn(value)
 
 
 class PaymentIntentInitiate(BaseModel):
@@ -74,6 +88,7 @@ class PaymentIntentOut(BaseModel):
     chama_id: uuid.UUID
     membership_id: uuid.UUID
     contribution_id: uuid.UUID | None
+    requested_phone: str | None
     amount: Decimal
     currency: str
     purpose: str

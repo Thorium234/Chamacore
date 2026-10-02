@@ -96,7 +96,53 @@ class AuthService:
             + timedelta(days=settings.refresh_token_expires_days),
         )
         self.db.commit()
-        return {"access_token": self.issue_token(user), "refresh_token": refresh_token}
+        return {
+            "access_token": self.issue_token(user),
+            "refresh_token": refresh_token,
+            "must_change_password": user.must_change_password,
+        }
+
+    def change_password(
+        self, *, user: User, current_password: str, new_password: str
+    ) -> User:
+        """Replace the caller's password and clear the forced-change flag.
+
+        Every existing refresh token is revoked so a password change ends all
+        other sessions immediately; the caller keeps working with the access
+        token it already holds.
+        """
+        if not verify_password(current_password, user.password_hash):
+            raise StateError("The current password is incorrect")
+        if verify_password(new_password, user.password_hash):
+            raise StateError("The new password must be different from the current one")
+        user.password_hash = hash_password(new_password)
+        user.must_change_password = False
+        now = datetime.now(timezone.utc)
+        self.refresh_tokens.revoke_all_for_user(user.id, revoked_at=now)
+        self.db.commit()
+        self.audit.record_commit(
+            actor=user,
+            chama_id=None,
+            action=AuditAction.AUTH_PASSWORD_CHANGE,
+            resource_type="user",
+            resource_id=user.id,
+        )
+        return user
+
+    def require_password_change(self, *, user: User, reason: str | None = None) -> User:
+        """Force the user to change their password at next login."""
+        if not user.must_change_password:
+            user.must_change_password = True
+            self.db.commit()
+            self.audit.record_commit(
+                actor=None,
+                chama_id=None,
+                action=AuditAction.AUTH_PASSWORD_CHANGE_REQUIRED,
+                resource_type="user",
+                resource_id=user.id,
+                payload={"reason": reason} if reason else None,
+            )
+        return user
 
     def rotate_refresh_token(self, *, refresh_token: str) -> dict[str, str]:
         """Exchange a valid refresh token for a new access + refresh pair.
@@ -117,6 +163,7 @@ class AuthService:
         user = self.users.get_by_id(token.user_id)
         if user is None or not user.is_active:
             raise StateError("This refresh token is no longer valid")
+        must_change_password = user.must_change_password
 
         self.refresh_tokens.revoke(token, revoked_at=now)
         new_refresh = generate_refresh_token()
@@ -133,7 +180,11 @@ class AuthService:
             resource_type="user",
             resource_id=user.id,
         )
-        return {"access_token": self.issue_token(user), "refresh_token": new_refresh}
+        return {
+            "access_token": self.issue_token(user),
+            "refresh_token": new_refresh,
+            "must_change_password": must_change_password,
+        }
 
     def revoke_refresh_token(self, *, refresh_token: str) -> None:
         """Revoke the presented refresh token (logout). Idempotent."""

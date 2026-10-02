@@ -56,13 +56,15 @@ def canonical_payload_hash(
     currency: str,
     purpose: str,
     contribution_id: str | None = None,
+    phone_number: str | None = None,
 ) -> str:
     """Hash of a client idempotency payload.
 
     Currency is upper-cased and the amount is passed as a canonical decimal
     string so an identical business request always hashes identically. The
-    optional ``contribution_id`` is part of the request so two requests that
-    agree on everything but the settled contribution are distinguishable.
+    optional ``contribution_id`` and ``phone_number`` are part of the request
+    so two requests that agree on everything else but differ in the settled
+    contribution or prompt phone are distinguishable.
     """
     canonical = json.dumps(
         {
@@ -71,6 +73,7 @@ def canonical_payload_hash(
             "currency": currency.upper(),
             "purpose": purpose,
             "contribution_id": contribution_id or "",
+            "phone_number": phone_number or "",
         },
         sort_keys=True,
         separators=(",", ":"),

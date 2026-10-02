@@ -37,6 +37,7 @@ class PaymentIntent(Base, UUIDMixin, TimestampMixin):
         ForeignKey("memberships.id", ondelete="RESTRICT"), nullable=False
     )
     contribution_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    requested_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="KES")
     purpose: Mapped[str] = mapped_column(String(255), nullable=False)

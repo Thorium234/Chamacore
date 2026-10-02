@@ -1,6 +1,7 @@
 """Contribution repository."""
 
 import uuid
+from datetime import date
 from decimal import Decimal
 
 from app.models.contribution import Contribution
@@ -47,6 +48,7 @@ class ContributionRepository(BaseRepository):
         amount: Decimal,
         period: str,
         recorded_by_user_id: uuid.UUID,
+        payment_date: date | None,
         note: str | None,
     ) -> Contribution:
         contribution = Contribution(
@@ -55,6 +57,7 @@ class ContributionRepository(BaseRepository):
             period=period,
             status=ContributionStatus.PENDING,
             recorded_by_user_id=recorded_by_user_id,
+            payment_date=payment_date,
             note=note,
         )
         self.db.add(contribution)

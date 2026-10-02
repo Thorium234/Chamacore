@@ -5,6 +5,7 @@ request. The audit system is separate from the ledger: it never stores
 financial balances or secrets, and events are immutable at the database level.
 """
 
+import logging
 import uuid
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,8 @@ from app.models.audit_event import AuditEvent
 from app.models.user import User
 from app.repositories.audit import AuditRepository
 from app.services.access import authorize_chama_access, get_chama_or_404
+
+logger = logging.getLogger(__name__)
 
 
 class AuditAction:
@@ -67,6 +70,13 @@ class AuditAction:
     PAYMENT_CONNECTION_CREDENTIALS_REPLACED = "payment_connection.credentials_replaced"
     PAYMENT_CONNECTION_DELETED = "payment_connection.deleted"
     C2B_REGISTRATION = "c2b.registration"
+    # Authentication (continued)
+    AUTH_PASSWORD_CHANGE = "auth.password_change"
+    AUTH_PASSWORD_CHANGE_REQUIRED = "auth.password_change_required"
+    # Platform administration
+    PLATFORM_CHAMA_STATUS_CHANGE = "platform.chama_status_change"
+    PLATFORM_ADMIN_GRANTED = "platform.admin_granted"
+    PLATFORM_ADMIN_REVOKED = "platform.admin_revoked"
 
 
 class AuditService:
@@ -101,7 +111,61 @@ class AuditService:
             user_agent=user_agent,
         )
         self.db.flush()
+        if success:
+            self._fan_out_notifications(
+                action=action,
+                actor=actor,
+                chama_id=chama_id,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                payload=payload,
+            )
         return event
+
+    def _fan_out_notifications(
+        self,
+        *,
+        action: str,
+        actor: User | None,
+        chama_id: uuid.UUID | None,
+        resource_type: str,
+        resource_id: uuid.UUID | None,
+        payload: dict | None,
+    ) -> None:
+        """Derive in-app notifications from a successful audited action.
+
+        Notification delivery is best-effort and must never fail the audited
+        business action, so any error is swallowed here and logged.
+        """
+        if action.startswith(("auth.login", "auth.logout", "auth.refresh", "auth.register")):
+            return
+        try:
+            from app.services.notification import NotificationService
+
+            NotificationService(self.db).fan_out(
+                action=action,
+                actor=actor,
+                chama_id=chama_id,
+                subject_member_id=self._subject_member_id(payload),
+                resource_type=resource_type,
+                resource_id=resource_id,
+                payload=payload,
+            )
+        except Exception:  # pragma: no cover - defensive, never fails the action
+            logger.exception("notification fan-out failed for action %s", action)
+
+    @staticmethod
+    def _subject_member_id(payload: dict | None) -> uuid.UUID | None:
+        """Read the affected member from an audit payload when one is recorded."""
+        if not payload:
+            return None
+        raw = payload.get("member_id")
+        if raw is None:
+            return None
+        try:
+            return uuid.UUID(str(raw))
+        except ValueError:
+            return None
 
     def record_commit(
         self,

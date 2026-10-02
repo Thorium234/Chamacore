@@ -186,6 +186,7 @@ def create_payment_intent(
         purpose=payload.purpose,
         idempotency_key=payload.idempotency_key,
         contribution_id=payload.contribution_id,
+        phone_number=payload.phone_number,
     )
 
 

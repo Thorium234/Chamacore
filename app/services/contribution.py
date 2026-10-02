@@ -63,6 +63,7 @@ class ContributionService:
             amount=data.amount,
             period=data.period,
             recorded_by_user_id=actor.id,
+            payment_date=data.payment_date,
             note=data.note,
         )
         try:

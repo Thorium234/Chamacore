@@ -25,6 +25,7 @@ pluggy==1.6.0
 psycopg==3.3.5
 psycopg-binary==3.3.5
 pwdlib==0.3.1
+pillow==12.3.0
 pycparser==3.0
 pydantic==2.13.5
 pydantic-settings==2.15.0
@@ -42,3 +43,4 @@ typing_extensions==4.16.0
 tzdata==2026.4
 uvicorn==0.53.0a
 asyncpg==0.31.0
+reportlab==4.4.4

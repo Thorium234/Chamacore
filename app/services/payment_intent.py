@@ -129,6 +129,7 @@ class PaymentIntentService:
         purpose: str,
         idempotency_key: str,
         contribution_id: uuid.UUID | None = None,
+        phone_number: str | None = None,
     ) -> PaymentIntent:
         """Create a payment intent idempotently by ``(chama, idempotency_key)``."""
         chama = self._chama(actor, chama_id)
@@ -146,12 +147,14 @@ class PaymentIntentService:
             currency=currency,
             purpose=purpose,
             contribution_id=str(contribution_id or ""),
+            phone_number=phone_number or "",
         )
 
         existing = self._find_intent_by_key(chama.id, idempotency_key)
         if existing is not None:
             return self._match_idempotent_create(
-                existing, target.id, amount, currency, purpose, payload_hash, contribution_id
+                existing, target.id, amount, currency, purpose, payload_hash,
+                contribution_id, phone_number,
             )
 
         intent = PaymentIntent(
@@ -159,6 +162,7 @@ class PaymentIntentService:
             chama_id=chama.id,
             membership_id=target.id,
             contribution_id=contribution_id,
+            requested_phone=phone_number,
             amount=amount,
             currency=currency,
             purpose=purpose,
@@ -206,6 +210,7 @@ class PaymentIntentService:
         purpose: str,
         payload_hash: str,
         contribution_id: uuid.UUID | None,
+        phone_number: str | None,
     ) -> PaymentIntent:
         if existing.idempotency_payload_hash != payload_hash:
             raise ConflictError(
@@ -222,6 +227,10 @@ class PaymentIntentService:
         if existing.contribution_id != contribution_id:
             raise ConflictError(
                 "This idempotency key was already used with a different contribution"
+            )
+        if existing.requested_phone != phone_number:
+            raise ConflictError(
+                "This idempotency key was already used with a different prompt phone"
             )
         return existing
 
@@ -416,7 +425,7 @@ class PaymentIntentService:
         actor: User,
     ) -> PaymentAttempt:
         client_reference = self._unique_client_reference(connection.id, intent.id, attempt_number)
-        phone = intent.membership.member.phone_number
+        phone = intent.requested_phone or intent.membership.member.phone_number
         callback_url = self._callback_url(connection)
 
         attempt = PaymentAttempt(

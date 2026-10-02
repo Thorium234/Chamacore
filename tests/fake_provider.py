@@ -54,6 +54,7 @@ class FakeAdapter(ProviderPort):
         self.parse_callback_fn = None
         self.register_c2b_error: ProviderIntegrationError | None = None
         self.last_register_request = None
+        self.create_requests: list = []
 
     def register_c2b_urls(
         self, *, credentials: dict, request, context: ConnectionContext
@@ -120,6 +121,7 @@ class FakeAdapter(ProviderPort):
     def create_payment_attempt(
         self, *, credentials: dict, request, context: ConnectionContext
     ) -> PaymentAttemptResult:
+        self.create_requests.append(request)
         if request.client_reference in self.create_exceptions:
             raise self.create_exceptions[request.client_reference]
         if request.client_reference in self.create_results:

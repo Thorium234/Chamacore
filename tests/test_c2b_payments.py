@@ -279,6 +279,7 @@ class TestC2BConfirmation:
             amount=Decimal("50.00"),
             period=period,
             recorded_by_user_id=uuid.UUID("6f1c3a5e-0000-4000-8000-0000000000a1"),
+            payment_date=None,
             note="existing pending",
         )
         db.commit()

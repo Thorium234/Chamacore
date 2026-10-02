@@ -19,6 +19,9 @@ class User(Base, UUIDMixin, TimestampMixin):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     member_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("members.id", ondelete="RESTRICT"), nullable=True, unique=True
     )

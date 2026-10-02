@@ -124,6 +124,73 @@ class TestRecordContribution:
         )
         assert r.status_code == 422
 
+    def test_payment_date_is_optional_and_returned(self, client):
+        headers, chama, m = _setup_contributing_chama(client)
+        r = client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            json={"membership_id": m["id"], "amount": "1000.00", "period": "2026-09"},
+        )
+        assert r.status_code == 201
+        assert r.json()["payment_date"] is None
+
+    def test_payment_date_recorded(self, client):
+        headers, chama, m = _setup_contributing_chama(client)
+        r = client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            json={
+                "membership_id": m["id"],
+                "amount": "1000.00",
+                "period": "2026-09",
+                "payment_date": "2026-09-05",
+            },
+        )
+        assert r.status_code == 201, r.json()
+        assert r.json()["payment_date"] == "2026-09-05"
+        listed = client.get(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+        ).json()
+        assert listed[0]["payment_date"] == "2026-09-05"
+
+    def test_payment_date_invalid_value_rejected(self, client):
+        headers, chama, m = _setup_contributing_chama(client)
+        r = client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            json={
+                "membership_id": m["id"],
+                "amount": "1000.00",
+                "period": "2026-09",
+                "payment_date": "05/09/2026",
+            },
+        )
+        assert r.status_code == 422
+
+    def test_payment_date_does_not_change_ledger_effect(self, client, db):
+        headers, chama, m = _setup_contributing_chama(client)
+        r = client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions",
+            headers=headers,
+            json={
+                "membership_id": m["id"],
+                "amount": "1000.00",
+                "period": "2026-09",
+                "payment_date": "2026-09-05",
+            },
+        )
+        contrib_id = r.json()["id"]
+        confirmed = client.post(
+            f"/api/v1/chamas/{chama['id']}/contributions/{contrib_id}/confirm",
+            headers=headers,
+        )
+        assert confirmed.status_code == 200
+        assert confirmed.json()["payment_date"] == "2026-09-05"
+        postings = [t for t in _ledger(db) if t.source_type == CONTRIBUTION_SOURCE_TYPE]
+        assert len(postings) == 1
+        assert sum(e.debit for t in postings for e in t.entries) == 1000
+
 
 class TestConfirmContribution:
     def test_confirm_creates_shares_and_posts_ledger(self, client, db):

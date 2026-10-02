@@ -12,12 +12,15 @@ from app.api.v1 import (
     ledger,
     loans,
     memberships,
+    notifications,
     payments,
     payments_webhooks,
     payouts,
+    platform,
     registration_fees,
     roles,
     shares,
+    statements,
 )
 
 api_router = APIRouter(dependencies=[Depends(check_general_rate_limit)])
@@ -35,3 +38,6 @@ api_router.include_router(audit.router)
 api_router.include_router(payments.router)
 api_router.include_router(payments_webhooks.router)
 api_router.include_router(c2b.router)
+api_router.include_router(platform.router)
+api_router.include_router(notifications.router)
+api_router.include_router(statements.router)

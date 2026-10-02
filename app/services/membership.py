@@ -81,6 +81,7 @@ class MembershipService:
                     action=AuditAction.MEMBERSHIP_CREATE,
                     resource_type="membership",
                     resource_id=membership.id,
+                    payload={"member_id": str(membership.member_id)},
                 )
                 return membership
             except IntegrityError as exc:
@@ -134,7 +135,11 @@ class MembershipService:
             action=AuditAction.MEMBERSHIP_STATUS_CHANGE,
             resource_type="membership",
             resource_id=membership.id,
-            payload={"from": previous, "to": status.value},
+            payload={
+                "from": previous,
+                "to": status.value,
+                "member_id": str(membership.member_id),
+            },
         )
         return membership
 

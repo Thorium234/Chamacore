@@ -22,6 +22,12 @@ from app.services.access import (
 from app.services.audit import AuditAction, AuditService
 
 
+# Roles that exist in the roles table but are not Chama membership roles.
+# PLATFORM_ADMIN is a global grant held on user_platform_roles, so it must
+# never be assignable or listable inside a Chama.
+NON_CHAMA_ROLES = frozenset({RoleName.PLATFORM_ADMIN})
+
+
 class RoleService:
     def __init__(self, db: Session):
         self.db = db
@@ -32,7 +38,7 @@ class RoleService:
     def list_chama_roles(self, *, actor: User, chama_id: uuid.UUID) -> list[Role]:
         chama = get_chama_or_404(self.db, chama_id)
         authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
-        return self.roles.list_all()
+        return [role for role in self.roles.list_all() if role.name not in NON_CHAMA_ROLES]
 
     def assign_role(
         self, *, actor: User, chama_id: uuid.UUID, membership_id: uuid.UUID, role: RoleName
@@ -42,6 +48,10 @@ class RoleService:
         require_role(actor_membership, RoleName.CHAIRPERSON)
         target = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
 
+        if role in NON_CHAMA_ROLES:
+            raise StateError(
+                "PLATFORM_ADMIN is a global grant and cannot be assigned inside a Chama"
+            )
         if role == RoleName.MEMBER:
             raise StateError("The MEMBER role is assigned automatically and cannot be assigned manually")
         if any(target.has_role(existing) for existing in LEADERSHIP_ROLES):
@@ -77,6 +87,10 @@ class RoleService:
         require_role(actor_membership, RoleName.CHAIRPERSON)
         target = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
 
+        if role in NON_CHAMA_ROLES:
+            raise StateError(
+                "PLATFORM_ADMIN is a global grant and cannot be removed inside a Chama"
+            )
         if role == RoleName.MEMBER:
             raise StateError("The MEMBER role is assigned automatically and cannot be removed")
         role_object = self.roles.get_by_name(role)
