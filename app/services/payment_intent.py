@@ -146,6 +146,14 @@ class PaymentIntentService:
 
         currency = currency.upper()
         requested_phone = normalize_ke_msisdn(phone_number) if phone_number else None
+        payload_hash = canonical_payload_hash(
+            membership_id=target.id,
+            amount=str(amount),
+            currency=currency,
+            purpose=purpose,
+            contribution_id=str(contribution_id) if contribution_id is not None else None,
+            phone_number=requested_phone,
+        )
 
         existing = self._find_intent_by_key(chama.id, idempotency_key)
         if existing is not None:
