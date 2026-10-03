@@ -130,9 +130,7 @@ class AuthService:
             raise StateError("The current password is incorrect")
         validate_password(new_password, email=user.email)
         user.must_change_password = False
-        now = datetime.now(timezone.utc)
-        self.refresh_tokens.revoke_all_for_user(user.id, revoked_at=now)
-        self.db.commit()
+        user.password_hash = hash_password(new_password)
         self.audit.record_commit(
             actor=user,
             chama_id=None,
