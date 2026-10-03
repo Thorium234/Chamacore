@@ -35,7 +35,9 @@ def register(
     db: Session = Depends(get_db),
     _rate_limit: None = Depends(check_register_rate_limit),
 ) -> User:
-    return AuthService(db).register(email=data.email, password=data.password)
+    return AuthService(db).register(
+        email=data.email, password=data.password, member=data.member
+    )
 
 
 @router.post("/token", response_model=TokenOut)

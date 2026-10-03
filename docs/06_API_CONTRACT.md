@@ -75,8 +75,12 @@ Values outside the ranges return HTTP 422. Endpoints with these parameters:
 
 Status: `IMPLEMENTED`
 
-Registers a new user. Body: `{"email": "...", "password": "..."}`.
-Returns 201 with the user (without password hash). Returns 409 on duplicate email.
+Registers a new user. Body: `{"email": "member@example.com", "password": "...", "member": {"first_name": "Ada", "last_name": "Njeri", "phone_number": "0712345678", "government_id": "12345678"}}`.
+Returns 201 with the user (without password hash). Email must be unique. The
+member identity is created or linked to a matching unlinked member record, so
+email, phone number, and government ID can each be used to sign in immediately.
+Phone numbers are normalized by the backend. Conflicting or already-linked
+identities return 409.
 
 ### `POST /api/v1/auth/token`
 

@@ -18,6 +18,7 @@ from app.models.user import User
 from app.repositories.member import MemberRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.user import UserRepository
+from app.schemas.chama import MemberDetails
 from app.services.audit import AuditAction, AuditService
 
 
@@ -40,11 +41,27 @@ class AuthService:
         self.refresh_tokens = RefreshTokenRepository(db)
         self.audit = AuditService(db)
 
-    def register(self, *, email: str, password: str) -> User:
+    def register(
+        self, *, email: str, password: str, member: MemberDetails
+    ) -> User:
         if self.users.get_by_email(email) is not None:
             raise ConflictError("An account with this email already exists")
+        existing_member = self.members.find_by_identity(
+            member.phone_number, member.government_id
+        )
+        if existing_member is None:
+            if self.members.phone_exists(member.phone_number):
+                raise ConflictError("phone_number is already registered to another member")
+            if self.members.government_id_exists(member.government_id):
+                raise ConflictError("government_id is already registered to another member")
+        elif self.users.get_by_member_id(existing_member.id) is not None:
+            raise ConflictError("This member identity is already linked to another account")
+
         validate_password(password, email=email)
+        if existing_member is None:
+            existing_member = self.members.create(member)
         user = self.users.create(email=email, password_hash=hash_password(password))
+        user.member_id = existing_member.id
         self.db.commit()
         self.audit.record_commit(
             actor=user,
