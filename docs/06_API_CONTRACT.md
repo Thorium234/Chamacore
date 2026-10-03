@@ -475,7 +475,10 @@ Attempt states include per-provider terminal outcomes (`PERMANENT_FAILURE`
 for known non-retryable errors, `TIMEOUT` with no provider request id, etc.);
 at most one attempt in flight; retry only after transient failure. A
 `provider_transactions` row records normalized status + raw provider response
-for offline resolution.
+for offline resolution. A definitive non-retryable rejection (including an
+invalid Daraja MSISDN rejected before the provider call) marks the intent
+`FAILED`; listing intents also repairs older rows whose last attempt is a
+recorded non-retryable failure but whose intent remained `PROCESSING`.
 
 ### STK settlement (ADR-019)
 

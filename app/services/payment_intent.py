@@ -247,7 +247,23 @@ class PaymentIntentService:
         offset: int = 0,
     ) -> list[PaymentIntent]:
         chama = self._chama(actor, chama_id)
-        return self.intents.list_by_chama(chama.id, limit=limit, offset=offset)
+        intents = self.intents.list_by_chama(chama.id, limit=limit, offset=offset)
+        repaired = False
+        for intent in intents:
+            if intent.status != PaymentIntentStatus.PROCESSING:
+                continue
+            attempts = self.attempts.list_for_intent(intent.id)
+            if attempts and attempts[-1].status == PaymentAttemptStatus.FAILED and not attempts[-1].retryable:
+                # Older builds persisted a definitive provider rejection on the
+                # attempt but left its parent intent PROCESSING. Repair that
+                # state on read so a reload no longer blocks a fresh payment.
+                self._transition_intent(
+                    intent, PaymentIntentStatus.FAILED, PaymentTransferSource.SYSTEM, None
+                )
+                repaired = True
+        if repaired:
+            self.db.commit()
+        return intents
 
     def refresh_processing_gauge(self) -> None:
         """Publish the current global count of PROCESSING intents.
@@ -472,6 +488,11 @@ class PaymentIntentService:
             transaction.normalized_status = ProviderTransactionStatus.FAILED
             transaction.raw_status = exc.code
             self.db.add_all([attempt, transaction])
+            if not attempt.retryable and intent.status == PaymentIntentStatus.PROCESSING:
+                self._transition_intent(
+                    intent, PaymentIntentStatus.FAILED,
+                    PaymentTransferSource.CLIENT, actor.id,
+                )
             self.db.commit()
             self.db.refresh(attempt)
             self._record_initiation(attempt, connection)
@@ -504,6 +525,11 @@ class PaymentIntentService:
         transaction.normalized_status = result.normalized_status
         transaction.raw_status = result.error_code
         self.db.add_all([attempt, transaction])
+        if not attempt.retryable and intent.status == PaymentIntentStatus.PROCESSING:
+            self._transition_intent(
+                intent, PaymentIntentStatus.FAILED,
+                PaymentTransferSource.CLIENT, actor.id,
+            )
         self.db.commit()
         self.db.refresh(attempt)
         self._record_initiation(attempt, connection)
@@ -610,6 +636,7 @@ class PaymentIntentService:
         attempt.completed_at = datetime.now(timezone.utc)
         attempt.failure_code = failure_code
         attempt.failure_message_safe = message_safe
+        attempt.retryable = failure_code not in PERMANENT_FAILURE_CODES
         attempt.last_transition_source = PaymentTransferSource.STATUS_QUERY
         self.db.commit()
 

@@ -278,9 +278,15 @@ class DarajaAdapter(ProviderPort):
                 "RESPONSE_MALFORMED", "Daraja STK Push response was not JSON"
             ) from exc
 
-        response_code = str(
-            payload.get("ResponseCode", payload.get("errorCode", payload.get("ErrorCode", "UNKNOWN")))
+        response_code_value = next(
+            (
+                payload.get(key)
+                for key in ("ResponseCode", "errorCode", "ErrorCode")
+                if payload.get(key) is not None and str(payload.get(key)).strip()
+            ),
+            None,
         )
+        response_code = str(response_code_value).strip() if response_code_value is not None else "UNKNOWN"
         checkout_request_id = payload.get("CheckoutRequestID")
         merchant_request_id = payload.get("MerchantRequestID")
 
@@ -292,9 +298,18 @@ class DarajaAdapter(ProviderPort):
                 normalized_status=ProviderTransactionStatus.PENDING,
             )
 
-        message = payload.get(
-            "ResponseDescription",
-            payload.get("CustomerMessage", payload.get("errorMessage", payload.get("ErrorMessage", "Daraja did not accept the STK Push request"))),
+        message = next(
+            (
+                payload.get(key)
+                for key in (
+                    "ResponseDescription",
+                    "CustomerMessage",
+                    "errorMessage",
+                    "ErrorMessage",
+                )
+                if isinstance(payload.get(key), str) and payload.get(key).strip()
+            ),
+            "Daraja did not accept the STK Push request",
         )
         return PaymentAttemptResult(
             accepted=False,
