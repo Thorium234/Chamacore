@@ -4,16 +4,22 @@ import uuid
 from datetime import date, datetime
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.models.enums import MembershipStatus, RoleName
 from app.schemas.chama import MemberDetails, MemberPublic
 from app.schemas.common import Money, PositiveMoney, Period, Quantity
 
 
+class MemberAccountDetails(MemberDetails):
+    """New Chama member details that also provision a login account."""
+
+    email: EmailStr
+
+
 class MembershipCreate(BaseModel):
     member_id: uuid.UUID | None = None
-    member: MemberDetails | None = None
+    member: MemberAccountDetails | None = None
 
     @model_validator(mode="after")
     def _validate_member_source(self) -> Self:

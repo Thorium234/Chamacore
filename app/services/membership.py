@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError
+from app.core.security import hash_password
 from app.models.enums import MembershipStatus, RoleName
 from app.models.membership import Membership
 from app.models.user import User
@@ -14,8 +15,8 @@ from app.repositories.member import MemberRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.registration_fee import RegistrationFeeRepository
 from app.repositories.role import RoleRepository
-from app.schemas.chama import MemberDetails
-from app.schemas.membership import MembershipCreate
+from app.repositories.user import UserRepository
+from app.schemas.membership import MemberAccountDetails, MembershipCreate
 
 from app.services.access import (
     LEADERSHIP_ROLES,
@@ -48,6 +49,8 @@ def classify_integrity_error(exc: IntegrityError) -> str | None:
         return "ix_members_phone_number"
     if "government_id" in text:
         return "ix_members_government_id"
+    if "email" in text:
+        return "ix_users_email"
     return None
 
 
@@ -55,6 +58,7 @@ class MembershipService:
     def __init__(self, db: Session):
         self.db = db
         self.members = MemberRepository(db)
+        self.users = UserRepository(db)
         self.memberships = MembershipRepository(db)
         self.roles = RoleRepository(db)
         self.fees = RegistrationFeeRepository(db)
@@ -89,7 +93,14 @@ class MembershipService:
                 self.db.rollback()
                 if constraint == _CHAMA_NUMBER_CONSTRAINT and attempt < MAX_NUMBER_RETRIES - 1:
                     continue
-                if constraint in (_CHAMA_MEMBER_CONSTRAINT, "ix_members_phone_number", "ix_members_government_id"):
+                if constraint in (
+                    _CHAMA_MEMBER_CONSTRAINT,
+                    "ix_members_phone_number",
+                    "ix_members_government_id",
+                    "ix_users_email",
+                ):
+                    if constraint == "ix_users_email":
+                        raise ConflictError("email is already registered to another account")
                     raise ConflictError("Duplicate member or membership record")
                 raise ConflictError("Could not create membership due to a data conflict") from exc
 
@@ -143,9 +154,19 @@ class MembershipService:
         )
         return membership
 
-    def _create_member(self, details: MemberDetails):
+    def _create_member(self, details: MemberAccountDetails):
         if self.members.phone_exists(details.phone_number):
             raise ConflictError("phone_number is already registered to another member")
         if self.members.government_id_exists(details.government_id):
             raise ConflictError("government_id is already registered to another member")
-        return self.members.create(details)
+        if self.users.get_by_email(str(details.email)) is not None:
+            raise ConflictError("email is already registered to another account")
+
+        member = self.members.create(details)
+        user = self.users.create(
+            email=str(details.email),
+            password_hash=hash_password(details.government_id),
+        )
+        user.member_id = member.id
+        user.must_change_password = True
+        return member

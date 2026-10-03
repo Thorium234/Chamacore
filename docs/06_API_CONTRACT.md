@@ -195,8 +195,12 @@ Status: `IMPLEMENTED`
 
 Adds a member to a Chama. Only `CHAIRPERSON`, `TREASURER`, or `SECRETARY`.
 Server-side membership number is allocated transactionally.
-Body: `{"member": {"first_name": "...", "last_name": "...", "phone_number": "...", "government_id": "..."}}`.
-Returns 201 with the membership. Returns 409 on duplicate member/membership.
+Body: `{"member": {"first_name": "...", "last_name": "...", "phone_number": "...", "government_id": "...", "email": "..."}}`.
+Creating a new member also creates a linked login account. The member can sign
+in using email, phone number, or government ID; the government ID is the
+temporary password and `must_change_password` is set until they choose a new
+password. Returns 201 with the membership. Returns 409 on duplicate
+member/membership or an email already used by another account.
 
 ### `GET /api/v1/chamas/{chama_id}/memberships`
 
