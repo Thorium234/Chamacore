@@ -25,6 +25,12 @@ class PermissionDeniedError(AppError):
     code = "PERMISSION_DENIED"
 
 
+class PasswordChangeRequiredError(PermissionDeniedError):
+    """Authentication succeeded, but the account must change its password."""
+
+    code = "PASSWORD_CHANGE_REQUIRED"
+
+
 class StateError(AppError):
     status_code = 400
     code = "INVALID_STATE"

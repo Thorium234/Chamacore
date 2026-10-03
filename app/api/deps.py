@@ -7,7 +7,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import RateLimitError
+from app.core.errors import PasswordChangeRequiredError, RateLimitError
 from app.core.ratelimit import RateLimiter
 from app.core.security import decode_access_token
 from app.db.session import get_db
@@ -29,6 +29,12 @@ _general_limiter = RateLimiter(get_settings().general_api_per_minute_limit, 60.0
 _register_limiter = RateLimiter(get_settings().auth_register_per_minute_limit, 60.0)
 _token_limiter = RateLimiter(get_settings().auth_token_per_minute_limit, 60.0)
 _member_link_limiter = RateLimiter(get_settings().auth_member_link_per_minute_limit, 60.0)
+
+PASSWORD_CHANGE_EXEMPT_PATHS = {
+    "/auth/change-password",
+    "/auth/logout",
+    "/auth/me",
+}
 
 
 def reset_rate_limiters() -> None:
@@ -67,6 +73,7 @@ def check_member_link_rate_limit(request: Request) -> None:
 
 
 def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -80,27 +87,9 @@ def get_current_user(
     user = UserRepository(db).get_by_id(user_id)
     if not user:
         raise INVALID_CREDENTIALS
-    return user
-
-
-PASSWORD_CHANGE_REQUIRED = HTTPException(
-    status_code=status.HTTP_403_FORBIDDEN,
-    detail="Password change is required",
-)
-
-
-PASSWORD_CHANGE_EXEMPT_PATHS = {
-    "/api/v1/auth/change-password",
-    "/api/v1/auth/logout",
-    "/api/v1/auth/me",
-    "/api/v1/auth/me/member-link",
-}
-
-
-def require_password_changed(
-    user: User = Depends(get_current_user),     request: Request = Depends(),
-) -> User:
     path = request.url.path
-    if user.must_change_password and path not in PASSWORD_CHANGE_EXEMPT_PATHS:
-        raise PASSWORD_CHANGE_REQUIRED
+    prefix = get_settings().api_v1_prefix.rstrip("/")
+    route_path = path[len(prefix) :] if path.startswith(f"{prefix}/") else path
+    if user.must_change_password and route_path not in PASSWORD_CHANGE_EXEMPT_PATHS:
+        raise PasswordChangeRequiredError("Password change is required")
     return user

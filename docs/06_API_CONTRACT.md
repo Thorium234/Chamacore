@@ -86,7 +86,9 @@ OAuth2 password grant. Body: `username`, `password` as form fields.
 Returns 200 with `{"access_token": "...", "refresh_token": "...", "token_type":
 "bearer", "expires_in": 7200}`. `expires_in` seconds equals
 `CHAMACORE_JWT_EXPIRES_MINUTES` (default 120). Returns 401 on failure. The
-system posting account (`system@chamacore.invalid`) always fails login.
+system posting account (`system@chamacore.invalid`) always fails login. The
+response also includes `must_change_password`; clients must route flagged users
+to password change before exposing the rest of the application.
 
 ### `POST /api/v1/auth/refresh`
 
@@ -120,6 +122,20 @@ Returns 200 with the updated user. Returns 404 if no match, 409 if already linke
 Status: `IMPLEMENTED`
 
 Returns the current authenticated user. Returns 401 if unauthenticated.
+It remains available when `must_change_password` is true so the client can read
+that flag. Other authenticated routes return 403 with
+`{"detail":{"code":"PASSWORD_CHANGE_REQUIRED","message":"Password change is required"}}`
+until the user changes their password. Only `/auth/me` and
+`/auth/change-password` remain authenticated API routes available to a flagged
+session; logout remains available so the user can exit.
+
+### `POST /api/v1/auth/change-password`
+
+Status: `IMPLEMENTED`
+
+Requires the current password and a password satisfying the server policy. It
+clears `must_change_password` and returns the updated user. The caller's current
+access token remains valid.
 
 ## Chamas
 

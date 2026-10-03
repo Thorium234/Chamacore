@@ -11,7 +11,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_password_changed
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.payment import (
