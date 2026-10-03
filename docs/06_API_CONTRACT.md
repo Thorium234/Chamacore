@@ -152,18 +152,20 @@ Creates a Chama and makes the authenticated user an ACTIVE member of it with
 seeded with the default chart of accounts). Returns 201 with the Chama plus the
 creator's `membership_id` and `roles`.
 
+An account already linked to a member cannot create a second Chama (409).
 The creator's member identity is reconciled with their account (ADR-008):
 
 - If the user is **not yet linked** (`users.member_id` is NULL): a member is
   created from the request body and linked to the user.
-- If the user is **already linked**: the new Chama's membership is attached to
-  their existing linked member and the body's `member` details are ignored (the
-  linked member is authoritative; the field may be omitted).
+- If the user is **already linked**: creation is rejected with 409. A user gets
+  one initial Chama; an existing member joins additional Chamas through an
+  executive-created membership.
 
 Body: `{"name": "...", "registration_fee_amount": "100.00", "member": {"first_name": "...", "last_name": "...", "phone_number": "...", "government_id": "..."}}`.
 The `member` field is required only for an unlinked user.
-Returns 400 if `member` is missing for an unlinked user, 409 on duplicate phone
-or government ID when creating a new member.
+Returns 400 if `member` is missing for an unlinked user, 409 when an already
+linked account tries to create another Chama, or on duplicate phone or
+government ID when creating a new member.
 
 ### `GET /api/v1/chamas`
 
@@ -206,7 +208,9 @@ member/membership or an email already used by another account.
 
 Status: `IMPLEMENTED`
 
-Returns all memberships for the Chama, ordered by membership number.
+Returns all memberships for the Chama, ordered by membership number, to
+CHAIRPERSON, TREASURER, and SECRETARY. Other active members receive only their
+own membership record.
 Supports `limit`/`offset` (see "List collection endpoints").
 Returns 403 if unauthorized, 404 if Chama not found.
 
@@ -248,7 +252,8 @@ Returns 200 with the updated membership. Returns 403 if not chairperson.
 
 Status: `IMPLEMENTED`
 
-Returns the registration fee for a membership. Any authorized member.
+Returns the caller's registration fee, or any membership's fee for an
+executive. A regular member requesting another member's fee receives 403.
 Returns 404 if not found.
 
 ### `POST /api/v1/chamas/{chama_id}/memberships/{membership_id}/registration-fee/waive`
@@ -264,7 +269,7 @@ Returns 200 with the updated fee.
 | --- | --- | --- |
 | `POST` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/registration-fee/pay` | Records payment, marks the fee `PAID`, and posts DR Cash / CR Registration Fees. `CHAIRPERSON` or `TREASURER`. |
 | `POST` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/registration-fee/payment/reverse` | Reverses a paid fee payment with a compensating ledger transaction and restores `OWED`. `CHAIRPERSON`. |
-| `GET` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/registration-fee/payments` | Lists payment history. Requires Chama access. |
+| `GET` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/registration-fee/payments` | Lists own payment history, or any membership's history for an executive. |
 
 Paying an already-paid fee is an idempotent no-op. Fee-payment posting uses
 the trusted ledger service and a database uniqueness constraint to prevent a
@@ -284,7 +289,9 @@ Returns 201. Returns 409 on duplicate non-reversed contribution for the period.
 
 Status: `IMPLEMENTED`
 
-Returns all contributions for a Chama. Any authorized member.
+Returns all contributions for a Chama to CHAIRPERSON, TREASURER, and SECRETARY.
+Other active members receive only their own contributions. Supplying another
+membership's `membership_id` returns 403.
 Supports `limit`/`offset` (see "List collection endpoints").
 
 **Query parameters (filters, strategic plan W0):**
@@ -316,14 +323,16 @@ Returns 200. Returns 409 if not CONFIRMED.
 
 Status: `IMPLEMENTED`
 
-Returns all share rows for a Chama (across memberships). Any authorized member.
+Returns all share rows for a Chama (across memberships) to CHAIRPERSON,
+TREASURER, and SECRETARY. Other active members receive 403.
 Supports `limit`/`offset` (see "List collection endpoints").
 
 ### `GET /api/v1/chamas/{chama_id}/memberships/{membership_id}/shares`
 
 Status: `IMPLEMENTED`
 
-Returns all shares for a membership. Any authorized member.
+Returns shares for the caller's own membership, or any membership for
+CHAIRPERSON, TREASURER, and SECRETARY. Other cross-member requests return 403.
 Returns 403 if unauthorized, 404 if membership not found.
 
 ## Ledger (V2)
@@ -333,7 +342,7 @@ Returns 403 if unauthorized, 404 if membership not found.
 Status: `IMPLEMENTED`
 
 Returns the Chama's financial transaction history (ledger transactions with
-their debit/credit entries). Any active member of the Chama.
+their debit/credit entries). CHAIRPERSON, TREASURER, and SECRETARY only.
 
 **Query parameters:**
 - `limit` (int, 1–100, default 25) — page size.
@@ -372,15 +381,15 @@ Amounts are decimal strings with two decimal places. Cursor pagination is
 keyset-based on `(created_at DESC, id DESC)`. The cursor is a base64-encoded
 JSON object containing a timestamp and transaction ID.
 
-Returns 422 if the cursor is malformed, 403 if the caller has no active
-membership, 404 if the Chama does not exist.
+Returns 422 if the cursor is malformed, 403 if the caller is not an executive
+member, 404 if the Chama does not exist.
 
 ### `GET /api/v1/chamas/{chama_id}/ledger/accounts`
 
 Status: `IMPLEMENTED`
 
-Returns the Chama's ledger accounts with their current balances. Any active
-member of the Chama.
+Returns the Chama's ledger accounts with their current balances. CHAIRPERSON,
+TREASURER, and SECRETARY only.
 
 **Response (`LedgerAccountsOut`):**
 ```json
@@ -403,7 +412,7 @@ Balances are signed decimals computed on demand from posted entries as
 (`SignedMoney`; assets read positive, equity/revenue read negative). No
 balance is ever stored or maintained as a competing financial truth.
 
-Returns 403 if the caller has no active membership, 404 if the Chama does not
+Returns 403 if the caller is not an executive member, 404 if the Chama does not
 exist.
 
 ### `GET /api/v1/chamas/{chama_id}/ledger/accounts/{account_id}/entries`
@@ -433,7 +442,7 @@ Returns one account with a cursor-paginated list of its posted entries
 ```
 
 Returns 404 if the account does not exist or belongs to another Chama, 403 if
-the caller has no active membership, 422 if the cursor is malformed.
+the caller is not an executive member, 422 if the cursor is malformed.
 
 Posting rules: there is no public endpoint that writes to the ledger. Ledger
 entries are created only by the trusted posting service when an approved
@@ -442,8 +451,9 @@ business event is posted (ADR-012).
 ## Payments (V3)
 
 Payment endpoints live under `/api/v1`. Connections management is
-chairperson-only; intents and attempts are readable by any active member and
-initiation selects an ACTIVE connection. Credentials are never returned.
+chairperson-only; members see their own intents and attempts while executives
+may view group-wide records. Initiation selects an ACTIVE connection.
+Credentials are never returned.
 
 ### Payment connections (ADR-017)
 
@@ -468,11 +478,11 @@ key/credential versions, validation info, and timestamps.
 | Method | Path | Notes |
 | --- | --- | --- |
 | `POST` | `/api/v1/chamas/{chama_id}/payment-intents` | 201. Body: `membership_id`, `amount`, `currency` (default KES), `purpose`, `idempotency_key`, optional `contribution_id`. Idempotent by `(chama_id, idempotency_key)` with payload-hash matching. |
-| `GET` | `/api/v1/chamas/{chama_id}/payment-intents` | List intents. Any active member. Supports `limit`/`offset`. |
-| `GET` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}` | One intent. Any active member. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-intents` | Executives list all intents; other members list only their own. Supports `limit`/`offset`. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}` | Own intent, or any intent for executives. |
 | `POST` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}/initiate` | Body: `connection_id`. Starts an STK Push attempt against an ACTIVE connection (first or retry). |
-| `GET` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}/attempts` | List attempts for an intent. Any active member. |
-| `GET` | `/api/v1/chamas/{chama_id}/payment-attempts/{attempt_id}` | One attempt across the Chama. Any active member. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-intents/{intent_id}/attempts` | Own intent's attempts, or any intent for executives. |
+| `GET` | `/api/v1/chamas/{chama_id}/payment-attempts/{attempt_id}` | Own attempt, or any attempt for executives. |
 
 Intent states: `PENDING → PROCESSING → SUCCEEDED | FAILED` (controlled).
 Attempt states include per-provider terminal outcomes (`PERMANENT_FAILURE`
@@ -608,15 +618,15 @@ See ADR-020 for full business rules and ledger postings.
 | Method | Path | Behavior |
 | --- | --- | --- |
 | `POST` | `/api/v1/chamas/{chama_id}/loans` | Apply for a loan; `201`; body `LoanApplyRequest`. |
-| `GET` | `/api/v1/chamas/{chama_id}/loans` | List Chama loans. Supports `limit`/`offset`. |
-| `GET` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/loans` | List loans for a membership. Supports `limit`/`offset`. |
+| `GET` | `/api/v1/chamas/{chama_id}/loans` | Executives list Chama loans; other members list only their own. Supports `limit`/`offset`. |
+| `GET` | `/api/v1/chamas/{chama_id}/memberships/{membership_id}/loans` | Own membership's loans, or any membership for executives. Supports `limit`/`offset`. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/submit` | Submit a draft application. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/approve` | Approve an eligible application; chairperson, applicant cannot self-approve. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/reject` | Reject an application; optional `LoanRejectRequest` note. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/cancel` | Cancel an approved, not-yet-disbursed loan. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/disburse` | Disburse an approved loan and post atomically to the ledger. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments` | Record repayment; `201`; body `LoanRepaymentCreate`. |
-| `GET` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments` | List repayment history. Supports `limit`/`offset`. |
+| `GET` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments` | Own loan's repayment history, or any loan for executives. Supports `limit`/`offset`. |
 | `POST` | `/api/v1/chamas/{chama_id}/loans/{loan_id}/repayments/{repayment_id}/reverse` | Reverse a repayment with a compensating ledger posting; optional note. |
 
 The member applies; chairperson actions approve, reject, cancel, and disburse.
@@ -628,7 +638,7 @@ Limits, derived balances, and repayment allocation are defined by ADR-020.
 | Method | Path | Behavior |
 | --- | --- | --- |
 | `POST` | `/api/v1/chamas/{chama_id}/payouts` | Request payout; `201`; body `PayoutRequestCreate`. |
-| `GET` | `/api/v1/chamas/{chama_id}/payouts` | List Chama payouts. Supports `limit`/`offset`. |
+| `GET` | `/api/v1/chamas/{chama_id}/payouts` | Executives list Chama payouts; other members list only their own. Supports `limit`/`offset`. |
 | `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/approve` | Approve request; chairperson, requester cannot self-approve. |
 | `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/reject` | Reject request; chairperson. |
 | `POST` | `/api/v1/chamas/{chama_id}/payouts/{payout_id}/process` | Mark payout processing; chairperson or treasurer. |
@@ -646,11 +656,24 @@ completion (ADR-021).
 
 Status: `IMPLEMENTED`
 
-Returns append-only business audit events for the Chama to an active member.
+Returns append-only business audit events for CHAIRPERSON, TREASURER, and
+SECRETARY.
 Supports `limit`/`offset`; when `limit` is omitted the most recent 200 events
 are returned. Events are separate from application logs and ledger
 transactions. No public write, update, or delete endpoints exist. Audit
 metadata must not contain passwords, tokens, secrets, or payment credentials.
+
+## PDF statements
+
+### `GET /api/v1/chamas/{chama_id}/statements`
+
+Downloads an `application/pdf` statement. Supports optional ISO-date `from`
+and `to` query parameters and an optional `membership_id` scope. A regular
+member always receives their own statement and receives 403 when naming
+another member. CHAIRPERSON, TREASURER, and SECRETARY may request a member or
+Chama-wide statement. A PLATFORM_ADMIN must hold an active Chama membership
+and follows that membership's scope; the global role alone does not grant
+Chama-level record access.
 
 ## API rules
 

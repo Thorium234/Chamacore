@@ -17,6 +17,8 @@ Only approved business rules may be implemented. Do not guess missing rules.
 
 - Users, Chamas, members, memberships, roles, registration-fee obligations,
   contributions, and shares.
+- Role-scoped read access for member financial records, with executive group
+  views and member-owned views (ADR-024).
 - Authentication, authorization, transactional membership numbers,
   migrations, and V1 hardening (identity-claim uniqueness, database
   constraint backstops, government-ID masking, JWT secret fail-closed,

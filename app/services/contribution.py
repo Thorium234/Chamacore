@@ -20,9 +20,11 @@ from app.repositories.ledger import LedgerRepository
 from app.repositories.share import ShareRepository
 from app.schemas.membership import ContributionCreate
 from app.services.access import (
+    LEADERSHIP_ROLES,
     authorize_chama_access,
     get_chama_or_404,
     get_target_membership,
+    require_own_or_leadership,
     require_roles,
 )
 from app.services.audit import AuditAction, AuditService
@@ -201,7 +203,15 @@ class ContributionService:
         status: ContributionStatus | None = None,
     ) -> list[Contribution]:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        caller_membership = authorize_chama_access(
+            self.db, actor=actor, chama_id=chama.id
+        )
+        if membership_id is not None:
+            require_own_or_leadership(
+                caller_membership, membership_id, resource="contributions"
+            )
+        elif not any(caller_membership.has_role(role) for role in LEADERSHIP_ROLES):
+            membership_id = caller_membership.id
         if membership_id is not None:
             get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
         return self.contributions.list_by_chama(

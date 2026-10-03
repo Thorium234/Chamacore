@@ -66,9 +66,11 @@ from app.repositories.payment import (
     ProviderTransactionRepository,
 )
 from app.services.access import (
+    LEADERSHIP_ROLES,
     authorize_chama_access,
     get_chama_or_404,
     get_target_membership,
+    require_own_or_leadership,
 )
 from app.services.settlement import settle_linked_contribution
 
@@ -133,7 +135,9 @@ class PaymentIntentService:
     ) -> PaymentIntent:
         """Create a payment intent idempotently by ``(chama, idempotency_key)``."""
         chama = self._chama(actor, chama_id)
+        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
         target = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
+        require_own_or_leadership(caller, target.id, resource="payment intents")
         if target.status.value != "ACTIVE":
             raise StateError("Payments can only be collected from active members")
 
@@ -236,6 +240,8 @@ class PaymentIntentService:
         intent = self.intents.get_in_chama(chama.id, intent_id)
         if intent is None:
             raise StateError("Payment intent not found in this Chama")
+        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        require_own_or_leadership(caller, intent.membership_id, resource="payment intents")
         return intent
 
     def list_intents(
@@ -247,7 +253,14 @@ class PaymentIntentService:
         offset: int = 0,
     ) -> list[PaymentIntent]:
         chama = self._chama(actor, chama_id)
-        intents = self.intents.list_by_chama(chama.id, limit=limit, offset=offset)
+        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        group_scope = any(caller.has_role(role) for role in LEADERSHIP_ROLES)
+        intents = self.intents.list_by_chama(
+            chama.id,
+            limit=limit,
+            offset=offset,
+            membership_id=None if group_scope else caller.id,
+        )
         repaired = False
         for intent in intents:
             if intent.status != PaymentIntentStatus.PROCESSING:
@@ -283,6 +296,10 @@ class PaymentIntentService:
         attempt = self.attempts.get_in_chama(chama.id, attempt_id)
         if attempt is None:
             raise StateError("Payment attempt not found in this Chama")
+        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        require_own_or_leadership(
+            caller, attempt.payment_intent.membership_id, resource="payment attempts"
+        )
         return attempt
 
     def list_attempts(
@@ -292,6 +309,8 @@ class PaymentIntentService:
         intent = self.intents.get_in_chama(chama.id, intent_id)
         if intent is None:
             raise StateError("Payment intent not found in this Chama")
+        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        require_own_or_leadership(caller, intent.membership_id, resource="payment attempts")
         return self.attempts.list_for_intent(intent.id)
 
     # -- initiation and retries ----------------------------------------------
@@ -314,6 +333,8 @@ class PaymentIntentService:
         intent = self.intents.get_in_chama(chama.id, intent_id)
         if intent is None:
             raise StateError("Payment intent not found in this Chama")
+        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        require_own_or_leadership(caller, intent.membership_id, resource="payment intents")
 
         if intent.status == PaymentIntentStatus.FAILED:
             raise StateError(

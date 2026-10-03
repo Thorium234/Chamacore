@@ -18,6 +18,7 @@ from app.services.access import (
     authorize_chama_access,
     get_chama_or_404,
     get_target_membership,
+    require_own_or_leadership,
     require_role,
     require_roles,
 )
@@ -45,8 +46,9 @@ class RegistrationFeeService:
         self, *, actor: User, chama_id: uuid.UUID, membership_id: uuid.UUID
     ) -> RegistrationFee:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
         membership = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
+        require_own_or_leadership(caller, membership.id, resource="registration fees")
         fee = self.fees.get_by_membership(membership.id)
         if fee is None:
             raise StateError("This membership has no registration fee record")
@@ -179,8 +181,9 @@ class RegistrationFeeService:
         self, *, actor: User, chama_id: uuid.UUID, membership_id: uuid.UUID
     ) -> list[object]:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
         membership = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
+        require_own_or_leadership(caller, membership.id, resource="registration fee payments")
         fee = self.fees.get_by_membership(membership.id)
         if fee is None:
             raise StateError("This membership has no registration fee record")

@@ -81,13 +81,17 @@ class PaymentIntentRepository(BaseRepository):
         ).first()
 
     def list_by_chama(
-        self, chama_id: uuid.UUID, *, limit: int | None = None, offset: int = 0
+        self,
+        chama_id: uuid.UUID,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+        membership_id: uuid.UUID | None = None,
     ) -> list[PaymentIntent]:
-        stmt = (
-            select(PaymentIntent)
-            .where(PaymentIntent.chama_id == chama_id)
-            .order_by(PaymentIntent.created_at.desc(), PaymentIntent.id.desc())
-        )
+        stmt = select(PaymentIntent).where(PaymentIntent.chama_id == chama_id)
+        if membership_id is not None:
+            stmt = stmt.where(PaymentIntent.membership_id == membership_id)
+        stmt = stmt.order_by(PaymentIntent.created_at.desc(), PaymentIntent.id.desc())
         if limit is not None:
             stmt = stmt.limit(limit).offset(offset)
         return list(self.db.scalars(stmt))

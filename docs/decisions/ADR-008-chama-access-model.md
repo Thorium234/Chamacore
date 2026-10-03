@@ -27,10 +27,8 @@ already decided in ADR-006.
 ## Consequences
 
 - Chama creation requires member details in the request body.
-- A user may only create a Chama once (the first time); subsequent Chama
-  creations by a user who is already linked to a member require using the
-  existing member link (or the endpoint allows creation without re-creating
-  the member).
+- A user may create one Chama only. A linked member joins additional Chamas
+  through membership registration by a Chama executive.
 - Authorization is membership-based: no membership = no access.
 
 ## Addendum 2026-09-15: Identity claim endpoint
@@ -54,3 +52,10 @@ at the database with `UNIQUE (users.member_id)` and in the linking service
 
 This prevents two separate accounts from acting as the same person and
 inheriting the same Chama leadership permissions.
+
+## Addendum 2026-10-04: One Chama per creator
+
+An account with `users.member_id` already set cannot create another Chama.
+The backend returns `409 Conflict`; the frontend hides create controls for
+linked accounts. Existing members join another Chama when its executive
+registers them.

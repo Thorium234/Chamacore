@@ -16,7 +16,12 @@ from app.models.ledger_entry import LedgerEntry
 from app.models.ledger_transaction import LedgerTransaction
 from app.models.user import User
 from app.repositories.ledger import LedgerAccountRepository, LedgerRepository
-from app.services.access import authorize_chama_access, get_chama_or_404
+from app.services.access import (
+    LEADERSHIP_ROLES,
+    authorize_chama_access,
+    get_chama_or_404,
+    require_roles,
+)
 
 REVERSAL_SOURCE_TYPE = "LEDGER_REVERSAL"
 CONTRIBUTION_SOURCE_TYPE = "CONTRIBUTION_CONFIRMATION"
@@ -182,7 +187,10 @@ class LedgerService:
 
     def list_by_chama(self, *, actor: User, chama_id: uuid.UUID) -> list[LedgerTransaction]:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        require_roles(
+            authorize_chama_access(self.db, actor=actor, chama_id=chama.id),
+            LEADERSHIP_ROLES,
+        )
         return self.ledger.list_by_chama(chama.id)
 
     def list_page(
@@ -195,7 +203,10 @@ class LedgerService:
         before_id: uuid.UUID | None,
     ) -> list[LedgerTransaction]:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        require_roles(
+            authorize_chama_access(self.db, actor=actor, chama_id=chama.id),
+            LEADERSHIP_ROLES,
+        )
         return self.ledger.list_page(
             chama.id,
             limit=limit,
@@ -212,7 +223,10 @@ class LedgerService:
         denormalized (production-readiness brief 4.2).
         """
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        require_roles(
+            authorize_chama_access(self.db, actor=actor, chama_id=chama.id),
+            LEADERSHIP_ROLES,
+        )
         accounts = self.accounts.list_in_chama(chama.id)
         balances = self.accounts.balances_in_chama(chama.id)
         return [
@@ -230,7 +244,10 @@ class LedgerService:
         before_id: uuid.UUID | None,
     ) -> list[LedgerEntry]:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        require_roles(
+            authorize_chama_access(self.db, actor=actor, chama_id=chama.id),
+            LEADERSHIP_ROLES,
+        )
         account = self.accounts.get_in_chama(chama.id, account_id)
         if account is None:
             raise StateError("Ledger account not found in this Chama")

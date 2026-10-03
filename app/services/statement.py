@@ -5,10 +5,10 @@ as a PDF. No financial state is written: a statement is a read-only projection.
 
 Authorization follows the documented rule (docs/15_STRATEGIC_PLAN.md W6):
 
-- CHAIRPERSON / TREASURER may request a Chama-wide statement.
+- CHAIRPERSON / TREASURER / SECRETARY may request a Chama-wide statement.
 - Any other active member may only request their own statement.
-- A PLATFORM_ADMIN with no membership in the Chama may request a Chama-wide
-  statement because their oversight grant is global.
+- A PLATFORM_ADMIN must also hold an active membership and follows that
+  membership's Chama role.
 """
 
 import uuid
@@ -28,11 +28,10 @@ from app.services.access import (
     authorize_chama_access,
     get_chama_or_404,
     get_target_membership,
-    is_platform_admin,
 )
 
 # Roles permitted to read every member's figures in the Chama.
-CHAMA_WIDE_ROLES = (RoleName.CHAIRPERSON, RoleName.TREASURER)
+CHAMA_WIDE_ROLES = (RoleName.CHAIRPERSON, RoleName.TREASURER, RoleName.SECRETARY)
 
 CURRENCY = "KES"
 
@@ -181,30 +180,7 @@ class StatementService:
 
         ``None`` for the membership-id list means Chama-wide access.
         """
-        membership: Membership | None = None
-        try:
-            membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
-        except PermissionDeniedError:
-            membership = None
-
-        if membership is None:
-            # A global platform administrator does not hold a Chama membership.
-            if not is_platform_admin(self.db, user=actor):
-                raise PermissionDeniedError(
-                    "You are not an active member of this Chama"
-                )
-            if membership_id is not None:
-                target = get_target_membership(
-                    self.db, chama_id=chama.id, membership_id=membership_id
-                )
-                member = target.member
-                return (
-                    None,
-                    [target.id],
-                    f"Member statement: {member.first_name} {member.last_name}",
-                    (f"{member.first_name} {member.last_name}", target.membership_number),
-                )
-            return None, None, "Chama-wide statement (platform administrator)", (None, None)
+        membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
 
         is_chama_wide = any(membership.has_role(role) for role in CHAMA_WIDE_ROLES)
         own_member = membership.member

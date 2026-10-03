@@ -68,7 +68,12 @@ class MembershipService:
         self, *, actor: User, chama_id: uuid.UUID, limit: int | None = None, offset: int = 0
     ) -> list[Membership]:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama_id)
+        caller_membership = authorize_chama_access(
+            self.db, actor=actor, chama_id=chama_id
+        )
+        if not any(caller_membership.has_role(role) for role in LEADERSHIP_ROLES):
+            rows = [caller_membership]
+            return rows[offset : offset + limit if limit is not None else None]
         return self.memberships.list_by_chama(chama.id, limit=limit, offset=offset)
 
     def create_membership(self, *, actor: User, chama_id: uuid.UUID, data: MembershipCreate) -> Membership:

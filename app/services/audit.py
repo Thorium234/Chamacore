@@ -14,7 +14,12 @@ from app.core.logging import get_request_id
 from app.models.audit_event import AuditEvent
 from app.models.user import User
 from app.repositories.audit import AuditRepository
-from app.services.access import authorize_chama_access, get_chama_or_404
+from app.services.access import (
+    LEADERSHIP_ROLES,
+    authorize_chama_access,
+    get_chama_or_404,
+    require_roles,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -207,13 +212,14 @@ class AuditService:
         limit: int | None = None,
         offset: int = 0,
     ) -> list[AuditEvent]:
-        """Return the Chama's audit events (any active member may read).
+        """Return audit events to Chama executives.
 
         ``limit`` may override the repository default of 200; a project may
         page with ``limit``/``offset`` while keeping the plain-array contract.
         """
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        require_roles(membership, LEADERSHIP_ROLES)
         return self.audit.list_by_chama(
             chama.id, limit=limit if limit is not None else 200, offset=offset
         )

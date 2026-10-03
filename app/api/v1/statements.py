@@ -29,9 +29,10 @@ def download_statement(
 ):
     """Download a statement for a date range as a PDF file.
 
-    Chama-wide for CHAIRPERSON, TREASURER and PLATFORM_ADMIN. Any other active
-    member receives their own statement only. The response is a file, not JSON,
-    so the client performs a blob download (frontend plan F7).
+    Chama-wide for CHAIRPERSON, TREASURER, and SECRETARY. Other active members
+    receive their own statement only. A platform administrator must also hold
+    an active membership and uses that membership's Chama role. The response is
+    a file, not JSON, so the client performs a blob download (frontend plan F7).
     """
     statement = StatementService(db).build(
         actor=actor,

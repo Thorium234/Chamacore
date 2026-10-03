@@ -34,6 +34,8 @@ class ChamaService:
         self.audit = AuditService(db)
 
     def create_chama(self, *, user: User, data: ChamaCreate) -> Chama:
+        if user.member_id is not None:
+            raise ConflictError("An account linked to a member cannot create another Chama")
         member = self._resolve_creator_member(user, data)
         if user.member_id is None:
             user.member_id = member.id  # link User to Member (ADR-008)
@@ -128,19 +130,13 @@ class ChamaService:
         return chama
 
     def _resolve_creator_member(self, user: User, data: ChamaCreate):
-        """Attach the creator to their linked member when one exists (ADR-008).
+        """Resolve the initial Chama creator's member record.
 
-        A user whose `member_id` is already set keeps using that member for
-        every Chama they create, so they are always an ACTIVE member of the new
-        Chama. The request body's `member` details are ignored for linked users
-        because `users.member_id` is the authoritative identity; the payload is
-        only used to create a member when the user is not yet linked.
+        `create_chama` rejects linked accounts; this helper creates and links
+        the member only for an account that has not created a Chama before.
         """
         if user.member_id is not None:
-            member = self.members.get_by_id(user.member_id)
-            if member is None:
-                raise StateError("The linked member no longer exists")
-            return member
+            raise ConflictError("An account linked to a member cannot create another Chama")
         if data.member is not None:
             return self._create_member(data.member)
         raise StateError("member details are required when creating a Chama")

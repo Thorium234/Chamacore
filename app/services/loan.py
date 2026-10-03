@@ -22,9 +22,11 @@ from app.repositories.loan_repayment import LoanRepaymentRepository
 from app.repositories.ledger import LedgerRepository
 from app.schemas.loan import LoanApplyRequest
 from app.services.access import (
+    LEADERSHIP_ROLES,
     authorize_chama_access,
     get_chama_or_404,
     get_target_membership,
+    require_own_or_leadership,
     require_role,
     require_roles,
 )
@@ -378,7 +380,11 @@ class LoanService:
         self, *, actor: User, chama_id: uuid.UUID, limit: int | None = None, offset: int = 0
     ) -> list[Loan]:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        if not any(membership.has_role(role) for role in LEADERSHIP_ROLES):
+            return self.loans.list_by_membership(
+                membership.id, limit=limit, offset=offset
+            )
         return self.loans.list_by_chama(chama.id, limit=limit, offset=offset)
 
     def list_by_membership(
@@ -391,8 +397,9 @@ class LoanService:
         offset: int = 0,
     ) -> list[Loan]:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
         membership = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
+        require_own_or_leadership(caller, membership.id, resource="loans")
         return self.loans.list_by_membership(membership.id, limit=limit, offset=offset)
 
     def list_repayments(
@@ -405,8 +412,9 @@ class LoanService:
         offset: int = 0,
     ) -> list[object]:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
         loan = self._get_chama_loan(chama.id, loan_id)
+        require_own_or_leadership(caller, loan.membership_id, resource="loan repayments")
         return self.repayments.list_by_loan(loan.id, limit=limit, offset=offset)
 
     # --- derived values ---------------------------------------------------

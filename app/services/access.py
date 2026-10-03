@@ -42,6 +42,20 @@ def require_roles(membership: Membership, roles: tuple[RoleName, ...]) -> None:
         raise PermissionDeniedError(f"This action requires one of the roles: {names}")
 
 
+def require_own_or_leadership(
+    caller: Membership,
+    target_membership_id: uuid.UUID,
+    *,
+    resource: str,
+) -> None:
+    """Allow a member to read their own financial data; leaders may read group data."""
+    if caller.id == target_membership_id:
+        return
+    if any(caller.has_role(role) for role in LEADERSHIP_ROLES):
+        return
+    raise PermissionDeniedError(f"You may only view your own {resource}")
+
+
 def require_role(membership: Membership, role: RoleName) -> None:
     if not membership.has_role(role):
         raise PermissionDeniedError(f"This action requires the {role.value} role")

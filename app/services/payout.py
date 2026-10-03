@@ -22,6 +22,7 @@ from app.schemas.payout import PayoutRequestCreate
 from app.services.access import (
     authorize_chama_access,
     get_chama_or_404,
+    LEADERSHIP_ROLES,
     require_role,
     require_roles,
 )
@@ -254,7 +255,10 @@ class PayoutService:
         self, *, actor: User, chama_id: uuid.UUID, limit: int | None = None, offset: int = 0
     ) -> list[Payout]:
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        if not any(membership.has_role(role) for role in LEADERSHIP_ROLES):
+            rows = self.payouts.list_by_membership(membership.id)
+            return rows[offset : offset + limit if limit is not None else None]
         return self.payouts.list_by_chama(chama.id, limit=limit, offset=offset)
 
     def _available_share_value(self, membership_id: uuid.UUID) -> Decimal:
