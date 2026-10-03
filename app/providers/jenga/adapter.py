@@ -321,10 +321,10 @@ class JengaAdapter(ProviderPort):
             digits = "254" + digits[1:]
         elif digits.startswith("7") or digits.startswith("1"):
             digits = "254" + digits
-        if not re.fullmatch(r"2547\d{8}", digits):
+        if not re.fullmatch(r"254(?:7\d{8}|11\d{7})", digits):
             raise ProviderIntegrationError(
                 "PHONE_FORMAT",
-                "Jenga STK Push requires a phone number in 2547XXXXXXXX format",
+                "Jenga STK Push requires a Safaricom number in the 07x or 011x range",
             )
         return digits
 

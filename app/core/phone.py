@@ -16,7 +16,7 @@ def normalize_ke_msisdn(raw: str) -> str:
     Strips ``+`` and separators, then folds the common national variants:
     - ``07XXXXXXXX``  -> ``2547XXXXXXXX``
     - ``7XXXXXXXX``   -> ``2547XXXXXXXX``
-    - ``011XXXXXXXX`` -> ``25411XXXXXXXX`` (kept; not a Safaricom prefix)
+    - ``011XXXXXXX``  -> ``25411XXXXXXX`` (Safaricom 011x range)
     - ``+2547...``    -> ``2547...`` (unchanged)
 
     Non-dialable strings are returned digit-only, matching the historical

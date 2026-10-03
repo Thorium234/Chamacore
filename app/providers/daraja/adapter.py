@@ -85,12 +85,12 @@ TOKEN_CACHE_TTL_SECONDS = 50 * 60
 
 
 def normalize_phone(raw: str) -> str:
-    """Normalize a Kenyan phone to 2547XXXXXXXX (12 digits) form."""
+    """Normalize Safaricom's 07x and 011x ranges to international form."""
     digits = normalize_ke_msisdn(raw)
-    if not re.fullmatch(r"2547\d{8}", digits):
+    if not re.fullmatch(r"254(?:7\d{8}|11\d{7})", digits):
         raise ProviderIntegrationError(
             "PHONE_FORMAT",
-            "Daraja STK Push requires a Safaricom number in 2547XXXXXXXX format",
+            "Daraja STK Push requires a Safaricom number in the 07x or 011x range",
         )
     return digits
 
