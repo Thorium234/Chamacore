@@ -89,7 +89,18 @@ PASSWORD_CHANGE_REQUIRED = HTTPException(
 )
 
 
-def require_password_changed(user: User = Depends(get_current_user)) -> User:
-    if user.must_change_password:
+PASSWORD_CHANGE_EXEMPT_PATHS = {
+    "/api/v1/auth/change-password",
+    "/api/v1/auth/logout",
+    "/api/v1/auth/me",
+    "/api/v1/auth/me/member-link",
+}
+
+
+def require_password_changed(
+    user: User = Depends(get_current_user),     request: Request = Depends(),
+) -> User:
+    path = request.url.path
+    if user.must_change_password and path not in PASSWORD_CHANGE_EXEMPT_PATHS:
         raise PASSWORD_CHANGE_REQUIRED
     return user
