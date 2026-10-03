@@ -78,6 +78,11 @@ def get_current_user(
     except ValueError as exc:
         raise INVALID_CREDENTIALS from exc
     user = UserRepository(db).get_by_id(user_id)
+    if not user:
+        raise INVALID_CREDENTIALS
+    return user
+
+
 PASSWORD_CHANGE_REQUIRED = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
     detail="Password change is required",
