@@ -141,20 +141,13 @@ class PaymentIntentService:
             self._validate_linked_contribution(target.id, contribution_id, amount)
 
         currency = currency.upper()
-        payload_hash = canonical_payload_hash(
-            membership_id=target.id,
-            amount=f"{amount}",
-            currency=currency,
-            purpose=purpose,
-            contribution_id=str(contribution_id or ""),
-            phone_number=phone_number or "",
-        )
+        requested_phone = normalize_ke_msisdn(phone_number) if phone_number else None
 
         existing = self._find_intent_by_key(chama.id, idempotency_key)
         if existing is not None:
             return self._match_idempotent_create(
                 existing, target.id, amount, currency, purpose, payload_hash,
-                contribution_id, phone_number,
+                contribution_id, requested_phone,
             )
 
         intent = PaymentIntent(
@@ -162,7 +155,7 @@ class PaymentIntentService:
             chama_id=chama.id,
             membership_id=target.id,
             contribution_id=contribution_id,
-            requested_phone=phone_number,
+            requested_phone=requested_phone,
             amount=amount,
             currency=currency,
             purpose=purpose,
@@ -181,8 +174,8 @@ class PaymentIntentService:
             existing = self._find_intent_by_key(chama.id, idempotency_key)
             if existing is not None:
                 return self._match_idempotent_create(
-                    existing, target.id, amount, currency, purpose, payload_hash, contribution_id
-                )
+                existing, target.id, amount, currency, purpose, payload_hash, contribution_id, requested_phone
+            )
             raise
         self.db.refresh(intent)
         return intent
