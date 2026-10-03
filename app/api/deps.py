@@ -13,6 +13,7 @@ from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
 from app.repositories.user import UserRepository
+from app.services.access import is_platform_admin, require_platform_admin  # noqa: F401
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{get_settings().api_v1_prefix}/auth/token",
@@ -77,6 +78,13 @@ def get_current_user(
     except ValueError as exc:
         raise INVALID_CREDENTIALS from exc
     user = UserRepository(db).get_by_id(user_id)
-    if user is None or not user.is_active:
-        raise INVALID_CREDENTIALS
+PASSWORD_CHANGE_REQUIRED = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail="Password change is required",
+)
+
+
+def require_password_changed(user: User = Depends(get_current_user)) -> User:
+    if user.must_change_password:
+        raise PASSWORD_CHANGE_REQUIRED
     return user

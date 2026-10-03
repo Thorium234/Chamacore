@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_platform_admin
 from app.db.session import get_db
 from app.models.enums import ChamaStatus, RoleName
 from app.models.user import User
