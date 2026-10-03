@@ -55,8 +55,21 @@ class AuthService:
         )
         return user
 
-    def authenticate(self, *, email: str, password: str) -> User | None:
-        user = self.users.get_by_email(email)
+    def authenticate(self, *, identifier: str, password: str) -> User | None:
+        if not identifier or not password:
+            return None
+        identifier_norm = identifier.strip()
+        user = self.users.get_by_email(identifier_norm)
+        if user is None:
+            from app.core.phone import normalize_ke_msisdn
+
+            try:
+                phone_norm = normalize_ke_msisdn(identifier_norm)
+            except Exception:
+                phone_norm = identifier_norm
+            user = self.users.get_by_phone(phone_norm) or self.users.get_by_phone(identifier_norm)
+        if user is None:
+            user = self.users.get_by_government_id(identifier_norm)
         if user is None or not user.is_active:
             return None
         if not verify_password(password, user.password_hash):

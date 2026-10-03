@@ -45,7 +45,7 @@ def login(
     _rate_limit: None = Depends(check_token_rate_limit),
 ) -> TokenOut:
     service = AuthService(db)
-    user = service.authenticate(email=form_data.username, password=form_data.password)
+    user = service.authenticate(identifier=form_data.username, password=form_data.password)
     if user is None:
         AuditService(db).record_commit(
             actor=None,
