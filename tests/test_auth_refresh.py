@@ -100,7 +100,7 @@ def test_system_user_cannot_login(client, db):
     """
     r = client.post(
         "/api/v1/auth/token",
-        data={"username": "system@chamacore.invalid", "password": "anything"},
+        data={"username": "system@chamacore.invalid", "password": "Secret123!"},
     )
     assert r.status_code == 401
 

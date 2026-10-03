@@ -9,7 +9,7 @@ class TestRegister:
     def test_register_returns_user(self, client):
         r = client.post(
             "/api/v1/auth/register",
-            json={"email": "alice@example.com", "password": "securepass123"},
+            json={"email": "alice@example.com", "password": "Securepass123!"},
         )
         assert r.status_code == 201
         body = r.json()
@@ -20,11 +20,11 @@ class TestRegister:
     def test_duplicate_email_rejected(self, client):
         client.post(
             "/api/v1/auth/register",
-            json={"email": "dup@example.com", "password": "securepass123"},
+            json={"email": "dup@example.com", "password": "Securepass123!"},
         )
         r = client.post(
             "/api/v1/auth/register",
-            json={"email": "dup@example.com", "password": "securepass456"},
+            json={"email": "dup@example.com", "password": "Securepass456!"},
         )
         assert r.status_code == 409
 
@@ -33,11 +33,11 @@ class TestToken:
     def test_login_returns_token(self, client):
         client.post(
             "/api/v1/auth/register",
-            json={"email": "bob@example.com", "password": "securepass123"},
+            json={"email": "bob@example.com", "password": "Securepass123!"},
         )
         r = client.post(
             "/api/v1/auth/token",
-            data={"username": "bob@example.com", "password": "securepass123"},
+            data={"username": "bob@example.com", "password": "Securepass123!"},
         )
         assert r.status_code == 200
         assert "access_token" in r.json()
@@ -46,18 +46,18 @@ class TestToken:
     def test_wrong_password_rejected(self, client):
         client.post(
             "/api/v1/auth/register",
-            json={"email": "carol@example.com", "password": "securepass123"},
+            json={"email": "carol@example.com", "password": "Securepass123!"},
         )
         r = client.post(
             "/api/v1/auth/token",
-            data={"username": "carol@example.com", "password": "wrongpassword"},
+            data={"username": "carol@example.com", "password": "Wrongpassword1!"},
         )
         assert r.status_code == 401
 
     def test_unknown_email_rejected(self, client):
         r = client.post(
             "/api/v1/auth/token",
-            data={"username": "unknown@example.com", "password": "securepass123"},
+            data={"username": "unknown@example.com", "password": "Securepass123!"},
         )
         assert r.status_code == 401
 
@@ -66,11 +66,11 @@ class TestMe:
     def test_me_returns_current_user(self, client):
         client.post(
             "/api/v1/auth/register",
-            json={"email": "me@example.com", "password": "securepass123"},
+            json={"email": "me@example.com", "password": "Securepass123!"},
         )
         r = client.post(
             "/api/v1/auth/token",
-            data={"username": "me@example.com", "password": "securepass123"},
+            data={"username": "me@example.com", "password": "Securepass123!"},
         )
         headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
         r = client.get("/api/v1/auth/me", headers=headers)
@@ -135,12 +135,12 @@ class TestRateLimit:
         for i in range(10):
             r = client.post(
                 "/api/v1/auth/register",
-                json={"email": f"rl{i}@example.com", "password": "securepass123"},
+                json={"email": f"rl{i}@example.com", "password": "Securepass123!"},
             )
             assert r.status_code == 201
         r = client.post(
             "/api/v1/auth/register",
-            json={"email": "overflow@example.com", "password": "securepass123"},
+            json={"email": "overflow@example.com", "password": "Securepass123!"},
         )
         assert r.status_code == 429
 
@@ -148,11 +148,11 @@ class TestRateLimit:
         for i in range(30):
             r = client.post(
                 "/api/v1/auth/token",
-                data={"username": "ghost@example.com", "password": "wrongpassword"},
+                data={"username": "ghost@example.com", "password": "Wrongpassword1!"},
             )
             assert r.status_code == 401
         r = client.post(
             "/api/v1/auth/token",
-            data={"username": "ghost@example.com", "password": "wrongpassword"},
+            data={"username": "ghost@example.com", "password": "Wrongpassword1!"},
         )
         assert r.status_code == 429

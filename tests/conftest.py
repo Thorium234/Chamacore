@@ -120,7 +120,7 @@ def get_concurrency_engine(tmp_path):
     return engine
 
 
-def register_and_login(client, email: str = "user@example.com", password: str = "secret123") -> dict:
+def register_and_login(client, email: str = "user@example.com", password: str = "Secret123!") -> dict:
     """Register a user and return the auth header dict."""
     r = client.post("/api/v1/auth/register", json={"email": email, "password": password})
     assert r.status_code == 201, f"register failed: {r.json()}"

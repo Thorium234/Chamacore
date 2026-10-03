@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import ConflictError, NotFoundError, StateError
+from app.core.password_policy import validate_password
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
@@ -42,6 +43,7 @@ class AuthService:
     def register(self, *, email: str, password: str) -> User:
         if self.users.get_by_email(email) is not None:
             raise ConflictError("An account with this email already exists")
+        validate_password(password, email=email)
         user = self.users.create(email=email, password_hash=hash_password(password))
         self.db.commit()
         self.audit.record_commit(
@@ -113,9 +115,7 @@ class AuthService:
         """
         if not verify_password(current_password, user.password_hash):
             raise StateError("The current password is incorrect")
-        if verify_password(new_password, user.password_hash):
-            raise StateError("The new password must be different from the current one")
-        user.password_hash = hash_password(new_password)
+        validate_password(new_password, email=user.email)
         user.must_change_password = False
         now = datetime.now(timezone.utc)
         self.refresh_tokens.revoke_all_for_user(user.id, revoked_at=now)
