@@ -43,6 +43,7 @@ from app.core.config import get_settings
 from app.core.credential_cipher import CredentialCipher, CredentialCipherError
 from app.core.errors import ConflictError, RateLimitError, StateError
 from app.core.metrics import payment_initiation_total, payment_intents_processing
+from app.core.phone import normalize_ke_msisdn
 from app.core.ratelimit import RateLimiter
 from app.models.enums import (
     ContributionStatus,
