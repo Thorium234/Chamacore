@@ -2,9 +2,8 @@
 
 import uuid
 from datetime import datetime
-from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.enums import ChamaStatus, RoleName
 
@@ -18,12 +17,11 @@ class PlatformChamaOut(BaseModel):
     name: str
     description: str | None
     status: ChamaStatus
-    registration_fee_amount: Decimal
     created_by_user_id: uuid.UUID
+    owner_name: str | None
+    owner_email: EmailStr
     created_at: datetime
     updated_at: datetime
-    active_member_count: int = 0
-    membership_count: int = 0
 
 
 class PlatformChamaStatusUpdate(BaseModel):
@@ -41,10 +39,12 @@ class PlatformUserOut(BaseModel):
     id: uuid.UUID
     email: str
     is_active: bool
-    must_change_password: bool
-    member_id: uuid.UUID | None
     platform_roles: list[RoleName] = []
     created_at: datetime
+
+
+class PlatformAdminGrantRequest(BaseModel):
+    email: EmailStr
 
 
 class PlatformStatsOut(BaseModel):
@@ -53,6 +53,4 @@ class PlatformStatsOut(BaseModel):
     pending_chamas: int
     suspended_chamas: int
     dissolved_chamas: int
-    total_users: int
-    total_members: int
     platform_admins: int

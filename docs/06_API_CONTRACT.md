@@ -155,20 +155,20 @@ readable, but all Chama-scoped mutations are blocked until a `PLATFORM_ADMIN`
 activates it. Suspended Chamas also remain read-only; only platform admins can
 change lifecycle status.
 
-An account already linked to a member cannot create a second Chama (409).
-The creator's member identity is reconciled with their account (ADR-008):
+An account may create one Chama. The creator's member identity is reconciled
+with their account (ADR-008):
 
 - If the user is **not yet linked** (`users.member_id` is NULL): a member is
   created from the request body and linked to the user.
-- If the user is **already linked**: creation is rejected with 409. A user gets
-  one initial Chama; an existing member joins additional Chamas through an
-  executive-created membership.
+- If the user is **already linked**: the existing member becomes the creator's
+  initial chairperson membership; no duplicate Member record is created.
+  Existing Chama members can create their own Chama once, provided they have
+  not already created one.
 
 Body: `{"name": "...", "registration_fee_amount": "100.00", "member": {"first_name": "...", "last_name": "...", "phone_number": "...", "government_id": "..."}}`.
-The `member` field is required only for an unlinked user.
-Returns 400 if `member` is missing for an unlinked user, 409 when an already
-linked account tries to create another Chama, or on duplicate phone or
-government ID when creating a new member.
+The `member` field is required only for an unlinked user. Returns 400 if
+`member` is missing for an unlinked user, 409 if the account already created a
+Chama, or on duplicate phone or government ID when creating a new member.
 
 ### `GET /api/v1/chamas`
 
@@ -682,12 +682,15 @@ Chama-level record access.
 
 All `/api/v1/platform/*` endpoints require a global `PLATFORM_ADMIN` grant;
 that grant is separate from Chama membership and does not authorize member
-financial access. The console exposes `GET /platform/stats`, `GET
-/platform/chamas`, `GET /platform/chamas/{chama_id}`, `PATCH
-/platform/chamas/{chama_id}/status`, `GET /platform/users`, role grant/revoke
-routes under `/platform/users/{user_id}/roles/{role}`, and
-`POST /platform/users/{user_id}/require-password-change`. Chama status is the
-available activation/suspension control. The current system does not yet have
+financial access. The console exposes platform lifecycle statistics, Chama
+name/owner/status listings, and status changes. Owner name and email identify
+the account that created the Chama; the console does not expose the member
+roster. It exposes only the
+platform-admin roster for global role management; it does not list Chama
+members or all user accounts. `GET /platform/admins` lists platform admins,
+`POST /platform/admins` grants the role to an existing account by email, and
+`DELETE /platform/admins/{user_id}` revokes it. Chama status is the available
+activation/suspension control. The current system does not yet have
 subscription plans, invoices, or subscription-payment records.
 
 ## Collection analytics

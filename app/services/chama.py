@@ -34,10 +34,17 @@ class ChamaService:
         self.audit = AuditService(db)
 
     def create_chama(self, *, user: User, data: ChamaCreate) -> Chama:
+        already_owns_chama = self.db.scalar(
+            select(Chama.id).where(Chama.created_by_user_id == user.id).limit(1)
+        )
+        if already_owns_chama is not None:
+            raise ConflictError("An account can create only one Chama")
         if user.member_id is not None:
-            raise ConflictError("An account linked to a member cannot create another Chama")
-        member = self._resolve_creator_member(user, data)
-        if user.member_id is None:
+            member = self.members.get_by_id(user.member_id)
+            if member is None:
+                raise StateError("The account's linked member record could not be found")
+        else:
+            member = self._resolve_creator_member(data)
             user.member_id = member.id  # link User to Member (ADR-008)
         chama = self.chamas.create(
             name=data.name,
@@ -120,17 +127,15 @@ class ChamaService:
         )
         return chama
 
-    def _resolve_creator_member(self, user: User, data: ChamaCreate):
+    def _resolve_creator_member(self, data: ChamaCreate):
         """Resolve the initial Chama creator's member record.
 
-        `create_chama` rejects linked accounts; this helper creates and links
-        the member only for an account that has not created a Chama before.
+        The member supplied during Chama creation is used only for accounts
+        that have not yet linked a member during registration.
         """
-        if user.member_id is not None:
-            raise ConflictError("An account linked to a member cannot create another Chama")
         if data.member is not None:
             return self._create_member(data.member)
-        raise StateError("member details are required when creating a Chama")
+        raise StateError("Member details are required to create a Chama")
 
     def _create_member(self, details: MemberDetails):
         if self.members.phone_exists(details.phone_number):

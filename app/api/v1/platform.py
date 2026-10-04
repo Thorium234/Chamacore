@@ -5,11 +5,12 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_platform_admin
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.enums import ChamaStatus, RoleName
 from app.models.user import User
 from app.schemas.platform import (
+    PlatformAdminGrantRequest,
     PlatformChamaOut,
     PlatformChamaStatusUpdate,
     PlatformStatsOut,
@@ -63,52 +64,29 @@ def update_platform_chama_status(
     )
 
 
-@router.get("/users", response_model=list[PlatformUserOut])
-def list_platform_users(
-    search: str | None = Query(default=None, max_length=255),
-    limit: int | None = Query(default=None, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
+@router.get("/admins", response_model=list[PlatformUserOut])
+def list_platform_admins(
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    return PlatformService(db).list_users(
-        actor=actor, search=search, limit=limit, offset=offset
-    )
+    return PlatformService(db).list_admins(actor=actor)
 
 
-@router.post(
-    "/users/{user_id}/roles/{role}", response_model=PlatformUserOut, status_code=201
-)
-def grant_platform_role(
-    user_id: uuid.UUID,
-    role: RoleName,
+@router.post("/admins", response_model=PlatformUserOut, status_code=201)
+def grant_platform_admin(
+    data: PlatformAdminGrantRequest,
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
-    return PlatformService(db).grant_platform_admin(
-        actor=actor, user_id=user_id, role=role
-    )
+    return PlatformService(db).grant_platform_admin_by_email(actor=actor, data=data)
 
 
-@router.delete("/users/{user_id}/roles/{role}", response_model=PlatformUserOut)
-def revoke_platform_role(
+@router.delete("/admins/{user_id}", response_model=PlatformUserOut)
+def revoke_platform_admin(
     user_id: uuid.UUID,
-    role: RoleName,
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ):
     return PlatformService(db).revoke_platform_admin(
-        actor=actor, user_id=user_id, role=role
-    )
-
-
-@router.post("/users/{user_id}/require-password-change", response_model=PlatformUserOut)
-def require_password_change(
-    user_id: uuid.UUID,
-    reason: str | None = Query(default=None, max_length=500),
-    db: Session = Depends(get_db),
-    actor: User = Depends(get_current_user),
-):
-    return PlatformService(db).require_password_change(
-        actor=actor, user_id=user_id, reason=reason
+        actor=actor, user_id=user_id, role=RoleName.PLATFORM_ADMIN
     )
