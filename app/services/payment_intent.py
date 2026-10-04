@@ -67,6 +67,7 @@ from app.repositories.payment import (
     ProviderTransactionRepository,
 )
 from app.services.access import (
+    authorize_chama_write,
     LEADERSHIP_ROLES,
     authorize_chama_access,
     get_chama_or_404,
@@ -136,7 +137,7 @@ class PaymentIntentService:
     ) -> PaymentIntent:
         """Create a payment intent idempotently by ``(chama, idempotency_key)``."""
         chama = self._chama(actor, chama_id)
-        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        caller = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         target = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
         require_own_or_leadership(caller, target.id, resource="payment intents")
         if target.status.value != "ACTIVE":
@@ -342,7 +343,7 @@ class PaymentIntentService:
         intent = self.intents.get_in_chama(chama.id, intent_id)
         if intent is None:
             raise StateError("Payment intent not found in this Chama")
-        caller = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        caller = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_own_or_leadership(caller, intent.membership_id, resource="payment intents")
 
         if intent.status == PaymentIntentStatus.FAILED:

@@ -22,7 +22,8 @@ roadmap for the remaining blocked work. The current order is:
 5. Loans (ADR-020) — complete
 6. Loan repayments (ADR-020) — complete
 7. Payouts (ADR-021) — complete
-8. Financial reporting — blocked pending report definitions (D-07)
+8. Role-scoped collection analytics (ADR-025) — implemented; broader financial
+   reporting remains blocked pending definitions (D-07)
 9. Business audit trail (ADR-023) — complete
 10. Targeted security hardening
 11. Integration testing
@@ -50,6 +51,9 @@ roadmap for the remaining blocked work. The current order is:
 - Production readiness (developer brief `reports/ChamaCore_Developer_
   Implementation_Brief.md`): short access tokens with rotating refresh flow,
   docs/metrics gating, security headers, system-user login guard
+- Platform administration: optional first-admin provisioning during Alembic
+  upgrade from ignored runtime secrets, with an idempotent CLI fallback;
+  monthly Chama collection analytics are ledger-backed and role-scoped (ADR-025)
 
 ### NEXT WORK
 

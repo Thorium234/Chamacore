@@ -22,6 +22,7 @@ from app.repositories.loan_repayment import LoanRepaymentRepository
 from app.repositories.ledger import LedgerRepository
 from app.schemas.loan import LoanApplyRequest
 from app.services.access import (
+    authorize_chama_write,
     LEADERSHIP_ROLES,
     authorize_chama_access,
     get_chama_or_404,
@@ -81,7 +82,7 @@ class LoanService:
 
     def apply(self, *, actor: User, chama_id: uuid.UUID, data: LoanApplyRequest) -> Loan:
         chama = get_chama_or_404(self.db, chama_id)
-        membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         principal = data.principal
         if _as_aware_utc(membership.joined_at) > datetime.now(timezone.utc) - timedelta(
             days=MIN_TENURE_DAYS
@@ -116,7 +117,7 @@ class LoanService:
 
     def submit(self, *, actor: User, chama_id: uuid.UUID, loan_id: uuid.UUID) -> Loan:
         chama = get_chama_or_404(self.db, chama_id)
-        membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         loan = self._get_chama_loan(chama.id, loan_id)
         if loan.membership_id != membership.id:
             raise StateError("Only the applicant can submit their loan application")
@@ -133,7 +134,7 @@ class LoanService:
 
     def approve(self, *, actor: User, chama_id: uuid.UUID, loan_id: uuid.UUID) -> Loan:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         loan = self._get_chama_loan(chama.id, loan_id)
         self._forbid_self_action(loan, actor_membership.id, "approve")
@@ -152,7 +153,7 @@ class LoanService:
 
     def reject(self, *, actor: User, chama_id: uuid.UUID, loan_id: uuid.UUID, note: str | None) -> Loan:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         loan = self._get_chama_loan(chama.id, loan_id)
         self._forbid_self_action(loan, actor_membership.id, "reject")
@@ -170,7 +171,7 @@ class LoanService:
 
     def cancel(self, *, actor: User, chama_id: uuid.UUID, loan_id: uuid.UUID) -> Loan:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         loan = self._get_chama_loan(chama.id, loan_id)
         self._transition(loan, (LoanStatus.APPROVED,), LoanStatus.CANCELLED)
@@ -197,7 +198,7 @@ class LoanService:
         serialized and cannot collectively overspend the Chama's cash.
         """
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         loan = self._get_chama_loan(chama.id, loan_id)
 
@@ -267,7 +268,7 @@ class LoanService:
         self, *, actor: User, chama_id: uuid.UUID, loan_id: uuid.UUID, amount: Decimal, note: str | None
     ) -> Loan:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_roles(actor_membership, (RoleName.CHAIRPERSON, RoleName.TREASURER))
         loan = self._get_chama_loan(chama.id, loan_id)
         if loan.status not in (LoanStatus.DISBURSED, LoanStatus.PARTIALLY_REPAID):
@@ -344,7 +345,7 @@ class LoanService:
         note: str | None,
     ) -> Loan:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         loan = self._get_chama_loan(chama.id, loan_id)
         repayment = self.repayments.get_by_id(repayment_id)

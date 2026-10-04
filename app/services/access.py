@@ -5,9 +5,9 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.errors import NotFoundError, PermissionDeniedError
+from app.core.errors import NotFoundError, PermissionDeniedError, StateError
 from app.models.chama import Chama
-from app.models.enums import MembershipStatus, RoleName
+from app.models.enums import ChamaStatus, MembershipStatus, RoleName
 from app.models.membership import Membership
 from app.models.user import User
 
@@ -33,6 +33,15 @@ def authorize_chama_access(db: Session, *, actor: User, chama_id: uuid.UUID) -> 
     membership = db.scalars(stmt).first()
     if membership is None:
         raise PermissionDeniedError("You are not an active member of this Chama")
+    return membership
+
+
+def authorize_chama_write(db: Session, *, actor: User, chama_id: uuid.UUID) -> Membership:
+    """Authorize a member mutation only while the Chama is active."""
+    chama = get_chama_or_404(db, chama_id)
+    membership = authorize_chama_access(db, actor=actor, chama_id=chama_id)
+    if chama.status != ChamaStatus.ACTIVE:
+        raise StateError("This Chama is read-only until a platform administrator activates it")
     return membership
 
 

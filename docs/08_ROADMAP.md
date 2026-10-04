@@ -23,6 +23,9 @@ Only approved business rules may be implemented. Do not guess missing rules.
   migrations, and V1 hardening (identity-claim uniqueness, database
   constraint backstops, government-ID masking, JWT secret fail-closed,
   health/readiness).
+- Global platform administration, cross-Chama lifecycle controls, and
+  operational dashboard metrics. First-admin provisioning is sourced from
+  ignored runtime secrets by Alembic, with an idempotent CLI fallback.
 
 ### V2 — Financial Core
 
@@ -40,6 +43,8 @@ Only approved business rules may be implemented. Do not guess missing rules.
 - C2B Paybill and successful STK contribution settlement (ADR-019).
 - Read-only account balances and account entries derived from posted ledger
   entries.
+- Twelve-month net contribution and registration-fee collection analytics,
+  derived from the ledger and scoped by member/executive role (ADR-025).
 - Append-only business audit events for the approved sensitive-action scope
   (ADR-023).
 - Decimal-safe money handling using `Decimal` and `NUMERIC(18,2)`.
@@ -73,7 +78,7 @@ No financial behavior is changed by that documentation work.
 
 | Area | Status | Reference |
 | --- | --- | --- |
-| Financial reporting beyond ledger history, balances, and account entries | Blocked pending definitions | D-07 in `docs/decisions/OPEN_QUESTIONS.md` |
+| Financial reporting beyond the role-scoped monthly collection series, ledger history, balances, and account entries | Blocked pending remaining definitions | D-07 in `docs/decisions/OPEN_QUESTIONS.md` |
 | Notifications | Deferred; scope requires ratification | D-09 |
 | Bank reconciliation | Deferred; scope requires ratification | D-10 |
 | Targeted security hardening | Not started | Scale report, step 10 |

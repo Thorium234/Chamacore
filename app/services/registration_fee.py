@@ -15,6 +15,7 @@ from app.repositories.registration_fee import RegistrationFeeRepository
 from app.repositories.registration_fee_payment import RegistrationFeePaymentRepository
 from app.repositories.share import ShareRepository
 from app.services.access import (
+    authorize_chama_write,
     authorize_chama_access,
     get_chama_or_404,
     get_target_membership,
@@ -58,7 +59,7 @@ class RegistrationFeeService:
         self, *, actor: User, chama_id: uuid.UUID, membership_id: uuid.UUID
     ) -> RegistrationFee:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         membership = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
         fee = self.fees.get_by_membership(membership.id)
@@ -86,7 +87,7 @@ class RegistrationFeeService:
         payments makes a second ledger posting impossible.
         """
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_roles(actor_membership, (RoleName.CHAIRPERSON, RoleName.TREASURER))
         membership = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
         fee = self.fees.get_by_membership(membership.id)
@@ -143,7 +144,7 @@ class RegistrationFeeService:
     ) -> RegistrationFee:
         """Reverse a PAID fee payment: compensating ledger + fee back to OWED."""
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         membership = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
         fee = self.fees.get_by_membership(membership.id)

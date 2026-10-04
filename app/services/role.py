@@ -13,6 +13,7 @@ from app.models.user import User
 from app.repositories.membership import MembershipRepository
 from app.repositories.role import RoleRepository
 from app.services.access import (
+    authorize_chama_write,
     LEADERSHIP_ROLES,
     authorize_chama_access,
     get_chama_or_404,
@@ -44,7 +45,7 @@ class RoleService:
         self, *, actor: User, chama_id: uuid.UUID, membership_id: uuid.UUID, role: RoleName
     ) -> Membership:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         target = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
 
@@ -83,7 +84,7 @@ class RoleService:
         self, *, actor: User, chama_id: uuid.UUID, membership_id: uuid.UUID, role: RoleName
     ) -> Membership:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         target = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
 

@@ -17,7 +17,7 @@ from app.repositories.membership import MembershipRepository
 from app.repositories.registration_fee import RegistrationFeeRepository
 from app.repositories.role import RoleRepository
 from app.schemas.chama import ChamaCreate, ChamaUpdate, MemberDetails
-from app.services.access import authorize_chama_access, get_chama_or_404, require_role
+from app.services.access import authorize_chama_write, authorize_chama_access, get_chama_or_404, require_role
 from app.services.audit import AuditAction, AuditService
 from app.services.ledger import LedgerService
 
@@ -43,7 +43,7 @@ class ChamaService:
             name=data.name,
             description=data.description,
             registration_fee_amount=data.registration_fee_amount,
-            status=ChamaStatus.ACTIVE,
+            status=ChamaStatus.PENDING,
             created_by_user_id=user.id,
         )
         creator_membership = self.memberships.create(
@@ -93,16 +93,16 @@ class ChamaService:
 
     def update_chama(self, *, actor: User, chama_id: uuid.UUID, data: ChamaUpdate) -> Chama:
         chama = get_chama_or_404(self.db, chama_id)
-        membership = authorize_chama_access(self.db, actor=actor, chama_id=chama_id)
+        membership = authorize_chama_write(self.db, actor=actor, chama_id=chama_id)
         require_role(membership, RoleName.CHAIRPERSON)
+        if data.status is not None:
+            raise StateError("Only a platform administrator can change a Chama's lifecycle status")
         if data.name is not None:
             chama.name = data.name
         if data.description is not None:
             chama.description = data.description
         if data.registration_fee_amount is not None:
             chama.registration_fee_amount = data.registration_fee_amount
-        if data.status is not None:
-            chama.status = data.status
         self.db.commit()
         self.audit.record_commit(
             actor=actor,
@@ -118,15 +118,6 @@ class ChamaService:
                 else None,
             },
         )
-        if data.status is not None:
-            self.audit.record_commit(
-                actor=actor,
-                chama_id=chama.id,
-                action=AuditAction.CHAMA_STATUS_CHANGE,
-                resource_type="chama",
-                resource_id=chama.id,
-                payload={"status": chama.status.value},
-            )
         return chama
 
     def _resolve_creator_member(self, user: User, data: ChamaCreate):

@@ -116,8 +116,9 @@ do not define share units as additional ledger entries.
   Capital / CR Cash atomically, with compensating reversal for corrections
   (ADR-021).
 
-OQ-014..OQ-020 are resolved. Financial reporting definitions remain open
-under D-07; see `docs/decisions/OPEN_QUESTIONS.md`.
+OQ-014..OQ-020 are resolved. ADR-025 defines role-scoped monthly collection
+analytics; broader financial reporting definitions remain open under D-07;
+see `docs/decisions/OPEN_QUESTIONS.md`.
 
 ## Reversal and correction rules
 
@@ -258,7 +259,8 @@ No posting, reversal, or account-management endpoints are exposed publicly.
 8. Payouts (ADR-021) — **delivered**.
 9. Registration-fee payments on the ledger (ADR-022) — **delivered**.
 10. General audit events for sensitive actions (ADR-023) — **delivered**.
-11. Financial reporting beyond ledger reads — blocked pending D-07.
+11. Broader financial reporting beyond the ADR-025 monthly collection series
+    and ledger reads — blocked pending D-07.
 
 ## Explicitly marked unresolved
 

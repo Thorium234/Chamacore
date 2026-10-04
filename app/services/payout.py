@@ -20,6 +20,7 @@ from app.repositories.ledger import LedgerRepository
 from app.repositories.payout import PayoutRepository
 from app.schemas.payout import PayoutRequestCreate
 from app.services.access import (
+    authorize_chama_write,
     authorize_chama_access,
     get_chama_or_404,
     LEADERSHIP_ROLES,
@@ -54,7 +55,7 @@ class PayoutService:
         self, *, actor: User, chama_id: uuid.UUID, data: PayoutRequestCreate
     ) -> Payout:
         chama = get_chama_or_404(self.db, chama_id)
-        membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         available = self._available_share_value(membership.id)
         if data.amount > available:
             raise StateError(
@@ -88,7 +89,7 @@ class PayoutService:
 
     def approve(self, *, actor: User, chama_id: uuid.UUID, payout_id: uuid.UUID) -> Payout:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         payout = self._get_chama_payout(chama.id, payout_id)
         self._forbid_self_action(payout, actor_membership.id, "approve")
@@ -108,7 +109,7 @@ class PayoutService:
 
     def reject(self, *, actor: User, chama_id: uuid.UUID, payout_id: uuid.UUID) -> Payout:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         payout = self._get_chama_payout(chama.id, payout_id)
         self._forbid_self_action(payout, actor_membership.id, "reject")
@@ -125,7 +126,7 @@ class PayoutService:
 
     def process(self, *, actor: User, chama_id: uuid.UUID, payout_id: uuid.UUID) -> Payout:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_roles(actor_membership, (RoleName.CHAIRPERSON, RoleName.TREASURER))
         payout = self._get_chama_payout(chama.id, payout_id)
         self._transition(payout, (PayoutStatus.APPROVED,), PayoutStatus.PROCESSING)
@@ -152,7 +153,7 @@ class PayoutService:
         and cannot collectively overspend the Chama's cash.
         """
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_roles(actor_membership, (RoleName.CHAIRPERSON, RoleName.TREASURER))
         payout = self._get_chama_payout(chama.id, payout_id)
 
@@ -206,7 +207,7 @@ class PayoutService:
         failure_reason: str,
     ) -> Payout:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_roles(actor_membership, (RoleName.CHAIRPERSON, RoleName.TREASURER))
         payout = self._get_chama_payout(chama.id, payout_id)
         self._transition(payout, (PayoutStatus.PROCESSING,), PayoutStatus.FAILED)
@@ -225,7 +226,7 @@ class PayoutService:
     def reverse(self, *, actor: User, chama_id: uuid.UUID, payout_id: uuid.UUID) -> Payout:
         """Reverse a COMPLETED payout with a compensating ledger entry."""
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(actor_membership, RoleName.CHAIRPERSON)
         payout = self._get_chama_payout(chama.id, payout_id)
         if payout.status != PayoutStatus.COMPLETED:

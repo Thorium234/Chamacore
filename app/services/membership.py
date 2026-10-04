@@ -19,6 +19,7 @@ from app.repositories.user import UserRepository
 from app.schemas.membership import MemberAccountDetails, MembershipCreate
 
 from app.services.access import (
+    authorize_chama_write,
     LEADERSHIP_ROLES,
     authorize_chama_access,
     get_chama_or_404,
@@ -78,7 +79,7 @@ class MembershipService:
 
     def create_membership(self, *, actor: User, chama_id: uuid.UUID, data: MembershipCreate) -> Membership:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama_id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama_id)
         require_roles(actor_membership, LEADERSHIP_ROLES)
 
         for attempt in range(MAX_NUMBER_RETRIES):
@@ -139,7 +140,7 @@ class MembershipService:
         status: MembershipStatus,
     ) -> Membership:
         chama = get_chama_or_404(self.db, chama_id)
-        actor_membership = authorize_chama_access(self.db, actor=actor, chama_id=chama_id)
+        actor_membership = authorize_chama_write(self.db, actor=actor, chama_id=chama_id)
         require_roles(actor_membership, (RoleName.CHAIRPERSON,))
         membership = get_target_membership(self.db, chama_id=chama.id, membership_id=membership_id)
         previous = membership.status.value

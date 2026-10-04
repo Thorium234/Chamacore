@@ -2,9 +2,9 @@
 
 ## Status date
 
-2026-09-30
+2026-10-04
 
-## Current status (30 Sep 2026)
+## Current status (04 Oct 2026)
 
 V1, the non-decision-blocked V2 financial core, and V3 payments remain
 implemented. ADR-020..ADR-023 were approved and their corresponding
@@ -14,8 +14,10 @@ migration, and feature tests are present. The older status notes below record
 the state at their own dates and are superseded where they conflict with this
 section and `docs/08_ROADMAP.md`.
 
-Financial reporting beyond ledger transactions, account balances, and account
-entries is still blocked pending D-07 report definitions. Notifications and
+Role-scoped monthly net collection analytics (contributions and registration
+fees) are implemented under ADR-025. Other financial reporting beyond ledger
+transactions, account balances, and account entries remains blocked pending
+D-07 report definitions. Notifications and
 bank reconciliation remain deferred pending ratified scope (D-09/D-10).
 Live payment-provider sandbox verification, targeted security hardening,
 broader integration testing, and performance measurement remain follow-up

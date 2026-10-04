@@ -3,6 +3,7 @@ from decimal import Decimal
 from functools import lru_cache
 from hashlib import sha256
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Deterministic, clearly-labelled development-only credential master key. It
@@ -86,6 +87,15 @@ class Settings(BaseSettings):
     # empty the endpoint returns 404 so the scrape path is never public.
     # Local development keeps /metrics open when CHAMACORE_DEBUG=true.
     metrics_token: str = ""
+
+    # Optional one-time bootstrap for the first cross-Chama platform admin.
+    # Secrets stay in the ignored .env/runtime environment, never in migrations.
+    bootstrap_platform_admin_email: str | None = None
+    bootstrap_platform_admin_password: SecretStr | None = None
+    bootstrap_platform_admin_phone: str | None = None
+    bootstrap_platform_admin_government_id: str | None = None
+    bootstrap_platform_admin_first_name: str = "Platform"
+    bootstrap_platform_admin_last_name: str = "Developer"
 
     def model_post_init(self, __context) -> None:
         default_secret = "local-development-only-secret-change-me-in-prod"

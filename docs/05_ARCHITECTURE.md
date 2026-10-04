@@ -92,8 +92,10 @@ ledger service; none of the modules maintains a competing balance.
 
 ## Remaining boundaries
 
-- Financial reports beyond ledger history, account balances, and account
-  entries remain undefined pending D-07.
+- Monthly net contribution and registration-fee collection analytics are
+  derived from ledger entries under ADR-025. Other financial reports beyond
+  ledger history, account balances, and account entries remain undefined
+  pending D-07.
 - Notifications and bank reconciliation are not implemented; their scope is
   pending ratified decisions D-09 and D-10.
 - Do not let route handlers become business-logic containers when extending

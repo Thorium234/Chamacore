@@ -54,6 +54,17 @@ API docs are available at `/docs` in debug builds (disabled in production).
 Run the test suite with `pytest`.
 Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
 
+### First platform administrator
+
+Set all `CHAMACORE_BOOTSTRAP_PLATFORM_ADMIN_*` values in the ignored `.env`
+file or deployment secret store before `alembic upgrade head`. The bootstrap
+revision creates a linked login identity and the global `PLATFORM_ADMIN`
+grant, requiring a password change at first login. It is idempotent and never
+resets an existing password. If the revision already ran without credentials,
+run `python -m app.db.bootstrap_platform_admin` after migrations. Remove the
+bootstrap password from the runtime environment after provisioning; use a
+new password at first login.
+
 ### Implemented
 
 - Users and authentication (register, token, me, claim member identity)
@@ -106,6 +117,9 @@ Production operation is covered in `docs/12_PRODUCTION_RUNBOOK.md`.
   reversal workflows with ledger posting on completion.
 - Business audit events (ADR-023): append-only events for defined sensitive
   actions, readable by active Chama members through a Chama-scoped endpoint.
+- Platform administration: cross-Chama lifecycle controls, user-role
+  management, platform operational analytics, and one-time admin bootstrap
+  from runtime secrets. Chama collection analytics are separately role-scoped.
 - Authentication hardening (production-readiness brief 3.1, 3.6): access
   tokens default to a 120-minute lifetime with `expires_in` in the token
   response, a rotating single-use refresh-token flow

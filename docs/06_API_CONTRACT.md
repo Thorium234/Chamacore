@@ -147,10 +147,13 @@ access token remains valid.
 
 Status: `IMPLEMENTED`
 
-Creates a Chama and makes the authenticated user an ACTIVE member of it with
-`CHAIRPERSON` + `MEMBER` roles and an OWED registration fee (the creator is
-seeded with the default chart of accounts). Returns 201 with the Chama plus the
-creator's `membership_id` and `roles`.
+Creates a Chama in `PENDING` status and makes the authenticated user an ACTIVE
+member of it with `CHAIRPERSON` + `MEMBER` roles and an OWED registration fee
+(the creator is seeded with the default chart of accounts). Returns 201 with
+the Chama plus the creator's `membership_id` and `roles`. The Chama remains
+readable, but all Chama-scoped mutations are blocked until a `PLATFORM_ADMIN`
+activates it. Suspended Chamas also remain read-only; only platform admins can
+change lifecycle status.
 
 An account already linked to a member cannot create a second Chama (409).
 The creator's member identity is reconciled with their account (ADR-008):
@@ -674,6 +677,30 @@ another member. CHAIRPERSON, TREASURER, and SECRETARY may request a member or
 Chama-wide statement. A PLATFORM_ADMIN must hold an active Chama membership
 and follows that membership's scope; the global role alone does not grant
 Chama-level record access.
+
+## Platform administration
+
+All `/api/v1/platform/*` endpoints require a global `PLATFORM_ADMIN` grant;
+that grant is separate from Chama membership and does not authorize member
+financial access. The console exposes `GET /platform/stats`, `GET
+/platform/chamas`, `GET /platform/chamas/{chama_id}`, `PATCH
+/platform/chamas/{chama_id}/status`, `GET /platform/users`, role grant/revoke
+routes under `/platform/users/{user_id}/roles/{role}`, and
+`POST /platform/users/{user_id}/require-password-change`. Chama status is the
+available activation/suspension control. The current system does not yet have
+subscription plans, invoices, or subscription-payment records.
+
+## Collection analytics
+
+### `GET /api/v1/chamas/{chama_id}/analytics/collections`
+
+Returns the last twelve calendar-month buckets of net cash collected from
+contributions and registration-fee payments, derived from posted ledger
+entries and their reversals. CHAIRPERSON, TREASURER, and SECRETARY receive
+Chama-wide totals; an ordinary member receives only their own totals. A global
+PLATFORM_ADMIN grant alone does not grant access to Chama financial analytics.
+Each bucket contains `month`, `contributions`, `registration_fees`, and
+`total_collected`; `scope` is `group` or `member` and `currency` is `KES`.
 
 ## API rules
 

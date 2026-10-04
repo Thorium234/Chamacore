@@ -17,6 +17,7 @@ from app.models.ledger_transaction import LedgerTransaction
 from app.models.user import User
 from app.repositories.ledger import LedgerAccountRepository, LedgerRepository
 from app.services.access import (
+    authorize_chama_write,
     LEADERSHIP_ROLES,
     authorize_chama_access,
     get_chama_or_404,
@@ -110,7 +111,7 @@ class LedgerService:
         """
         chama = get_chama_or_404(self.db, chama_id)
         if require_membership:
-            authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+            authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
 
         lines = self._normalize_lines(lines)
         self._validate_lines(chama.id, lines)
@@ -161,7 +162,7 @@ class LedgerService:
     ) -> LedgerTransaction:
         """Reverse an immutable ledger transaction with a compensating transaction."""
         chama = get_chama_or_404(self.db, chama_id)
-        authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
 
         transaction = self.ledger.get_by_id_in_chama(chama.id, transaction_id)
         if transaction is None:

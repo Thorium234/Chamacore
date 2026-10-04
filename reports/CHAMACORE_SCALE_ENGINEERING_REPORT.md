@@ -10,8 +10,9 @@ where noted here and in `docs/08_ROADMAP.md`:
 - Financial decisions D-01..D-06 and D-08 were ratified and implemented by
   ADR-020..ADR-023: registration-fee settlement, loans, repayments, payouts,
   and append-only business audit events.
-- Financial reporting beyond existing ledger reads remains blocked pending
-  report definitions D-07.
+- Monthly net contribution and registration-fee collection charts are
+  implemented under ADR-025; other financial reporting remains blocked
+  pending report definitions D-07.
 - Notifications (D-09) and bank reconciliation (D-10) remain deferred until
   their scope is ratified.
 - Targeted security hardening, broader integration testing, and performance

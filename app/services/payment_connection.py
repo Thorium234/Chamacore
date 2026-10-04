@@ -55,6 +55,7 @@ from app.schemas.payment import C2BRegisterUrlOut
 from app.services.access import (
     RoleName,
     authorize_chama_access,
+    authorize_chama_write,
     get_chama_or_404,
     require_role,
 )
@@ -73,7 +74,7 @@ class PaymentConnectionService:
 
     def _chairperson_chama(self, actor: User, chama_id: uuid.UUID):
         chama = get_chama_or_404(self.db, chama_id)
-        membership = authorize_chama_access(self.db, actor=actor, chama_id=chama.id)
+        membership = authorize_chama_write(self.db, actor=actor, chama_id=chama.id)
         require_role(membership, RoleName.CHAIRPERSON)
         return chama
 

@@ -19,7 +19,8 @@ Current truth: V1, the V2 financial core (including registration-fee
 settlement, loans, repayments, and payouts), V3 Payments, the append-only
 business audit event system, and production-readiness work are implemented.
 The approved decisions are ADR-020..ADR-023. Follow `docs/08_ROADMAP.md` for
-current scope; financial reporting beyond ledger reads remains blocked on D-07,
+current scope; financial reporting beyond the ADR-025 collection series and
+ledger reads remains blocked on D-07,
 while notifications and reconciliation await ratified scope (D-09/D-10).
 
 Do not reimplement completed modules or invent additional financial behavior.

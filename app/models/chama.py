@@ -28,7 +28,7 @@ class Chama(Base, UUIDMixin, TimestampMixin):
     status: Mapped[ChamaStatus] = mapped_column(
         Enum(ChamaStatus, native_enum=False, length=20, values_callable=lambda e: [m.value for m in e]),
         nullable=False,
-        default=ChamaStatus.ACTIVE,
+        default=ChamaStatus.PENDING,
     )
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False

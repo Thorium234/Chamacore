@@ -173,7 +173,7 @@ remain open; their corresponding work stays blocked until decided.
 | D-04 | Payout eligibility and approval | OQ-019/OQ-020, spec §13–§15 | Ratified and implemented — ADR-021 |
 | D-05 | Registration-fee payment accounting | OQ-014, spec §16 | Ratified and implemented — ADR-022 |
 | D-06 | Loan/payout chart of accounts | OQ-012, spec §10 | Ratified and implemented — ADR-020 |
-| D-07 | Report definitions | spec §17 | Open; reporting beyond current ledger reads remains blocked |
+| D-07 | Report definitions | spec §17 | Partially resolved by ADR-025 for monthly net contributions and registration-fee collections; all other financial reports remain open |
 | D-08 | Audit event scope | scale report step 9, spec §19–§21 | Ratified and implemented — ADR-023 |
 | D-09 | Notification scope and channels | spec §25–§27 | Open; do not implement until ratified |
 | D-10 | Reconciliation scope and matching | spec §22–§24 | Open; do not implement until ratified |
