@@ -40,7 +40,7 @@ class TestAuditEvents:
         assert events[0]["actor_user_id"] is not None
 
     def test_login_failure_is_audited(self, client, db):
-        _ = register_and_login(client, "target-login@e.com", password="right-pass")
+        _ = register_and_login(client, "target-login@e.com", password="StrongPassword123!")
         r = client.post("/api/v1/auth/token", data={"username": "target-login@e.com", "password": "wrong-pass"})
         assert r.status_code == 401
         chair = register_and_login(client, "chair-audit4@e.com")

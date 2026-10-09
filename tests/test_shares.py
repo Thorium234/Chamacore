@@ -78,8 +78,8 @@ class TestListChamaShares:
 
     def test_non_member_cannot_list(self, client):
         _, chama = _setup(client)
-        client.post("/api/v1/auth/register", json={"email": "stranger@e.com", "password": "password123"})
-        r = client.post("/api/v1/auth/token", data={"username": "stranger@e.com", "password": "password123"})
+        client.post("/api/v1/auth/register", json={"email": "stranger@e.com", "password": "StrongTestPassword123!"})
+        r = client.post("/api/v1/auth/token", data={"username": "stranger@e.com", "password": "StrongTestPassword123!"})
         headers_s = {"Authorization": f"Bearer {r.json()['access_token']}"}
         r = client.get(f"/api/v1/chamas/{chama['id']}/shares", headers=headers_s)
         assert r.status_code == 403

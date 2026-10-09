@@ -8,9 +8,9 @@ from tests.conftest import register_and_login, create_chama
 class TestCreateChama:
     def test_create_chama(self, client):
         headers = register_and_login(client, "creator@example.com")
-        chama = create_chama(client, headers)
+        chama = create_chama(client, headers, activate=False)
         assert chama["name"] == "Test Chama"
-        assert chama["status"] == "ACTIVE"
+        assert chama["status"] == "PENDING"
         assert chama["registration_fee_amount"] == "100.00"
 
     def test_create_chama_response_has_membership(self, client):
@@ -19,10 +19,12 @@ class TestCreateChama:
         assert chama["membership_id"]
         assert set(chama["roles"]) == {"CHAIRPERSON", "MEMBER"}
 
-    def test_create_chama_without_member_details_rejected(self, client):
+    def test_linked_user_can_create_chama_without_reentering_member_details(self, client):
         headers = register_and_login(client)
         r = client.post("/api/v1/chamas", headers=headers, json={"name": "No Member"})
-        assert r.status_code == 400
+        assert r.status_code == 201
+        assert r.json()["membership_id"]
+        assert r.json()["status"] == "PENDING"
 
     def test_unauthenticated_rejected(self, client):
         r = client.post("/api/v1/chamas", json={"name": "No Auth"})
@@ -157,7 +159,7 @@ class TestUpdateChama:
         r = client.post(
             f"/api/v1/chamas/{chama['id']}/memberships",
             headers=headers,
-            json={"member": {"first_name": "M", "last_name": "N", "phone_number": "+254700000010", "government_id": "GID-10"}},
+            json={"member": {"first_name": "M", "last_name": "N", "phone_number": "+254700000010", "government_id": "GID-10", "email": "member-10@example.com"}},
         )
         assert r.status_code == 201
         r = client.patch(
@@ -167,15 +169,11 @@ class TestUpdateChama:
         )
         assert r.status_code == 403
 
-    def test_activate_deactivate_chama(self, client):
+    def test_chairperson_cannot_change_lifecycle_status(self, client):
         headers = register_and_login(client, "status@example.com")
         chama = create_chama(client, headers)
         r = client.patch(
             f"/api/v1/chamas/{chama['id']}", headers=headers, json={"status": "INACTIVE"}
         )
-        assert r.status_code == 200
-        assert r.json()["status"] == "INACTIVE"
-        r = client.patch(
-            f"/api/v1/chamas/{chama['id']}", headers=headers, json={"status": "ACTIVE"}
-        )
-        assert r.json()["status"] == "ACTIVE"
+        assert r.status_code == 400
+        assert "platform administrator" in r.json()["detail"]["message"]

@@ -17,7 +17,7 @@ from app.core.config import get_settings
 from app.models.user import User
 
 
-def _register_and_login(client, db, email="refresh@example.com", password="Secret123!"):
+def _register_and_login(client, db, email="refresh@example.com", password="StrongPassword123!"):
     r = client.post("/api/v1/auth/register", json={"email": email, "password": password})
     assert r.status_code == 201
     r = client.post("/api/v1/auth/token", data={"username": email, "password": password})
@@ -100,7 +100,7 @@ def test_system_user_cannot_login(client, db):
     """
     r = client.post(
         "/api/v1/auth/token",
-        data={"username": "system@chamacore.invalid", "password": "Secret123!"},
+        data={"username": "system@chamacore.invalid", "password": "StrongPassword123!"},
     )
     assert r.status_code == 401
 

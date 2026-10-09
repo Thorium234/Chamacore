@@ -25,7 +25,7 @@ class TestCreateMembership:
         r = client.post(
             f"/api/v1/chamas/{chama['id']}/memberships",
             headers=headers,
-            json={"member": {"first_name": "X", "last_name": "Y", "phone_number": "+254700000022", "government_id": "GID-22"}},
+            json={"member": {"first_name": "X", "last_name": "Y", "phone_number": "+254700000022", "government_id": "GID-22", "email": "member-22@example.com"}},
         )
         assert r.status_code == 409
 
@@ -39,7 +39,7 @@ class TestCreateMembership:
         r = client.post(
             f"/api/v1/chamas/{chama_a['id']}/memberships",
             headers=headers_a,
-            json={"member": {"first_name": "S", "last_name": "A", "phone_number": "+254700000055", "government_id": "GID-55"}},
+            json={"member": {"first_name": "S", "last_name": "A", "phone_number": "+254700000055", "government_id": "GID-55", "email": "member-55@example.com"}},
         )
         assert r.status_code == 201
 
@@ -97,14 +97,14 @@ class TestCreateMembership:
         r = client.post(
             f"/api/v1/chamas/{chama['id']}/memberships",
             headers=headers_chair,
-            json={"member": {"first_name": "B", "last_name": "M", "phone_number": "+254700000077", "government_id": "GID-77"}},
+            json={"member": {"first_name": "B", "last_name": "M", "phone_number": "+254700000077", "government_id": "GID-77", "email": "member-77@example.com"}},
         )
         assert r.status_code == 201
         # basic user tries to add someone — should be denied (no leadership role)
         r = client.post(
             f"/api/v1/chamas/{chama['id']}/memberships",
             headers=headers_member,
-            json={"member": {"first_name": "X", "last_name": "Y", "phone_number": "+254700000088", "government_id": "GID-88"}},
+            json={"member": {"first_name": "X", "last_name": "Y", "phone_number": "+254700000088", "government_id": "GID-88", "email": "member-88@example.com"}},
         )
         assert r.status_code == 403
 
@@ -141,7 +141,7 @@ class TestMembershipStatus:
         r = client.post(
             f"/api/v1/chamas/{chama['id']}/memberships",
             headers=headers_chair,
-            json={"member": {"first_name": "O", "last_name": "Z", "phone_number": "+254700000310", "government_id": "GID-310"}},
+            json={"member": {"first_name": "O", "last_name": "Z", "phone_number": "+254700000310", "government_id": "GID-310", "email": "member-310@example.com"}},
         )
         assert r.status_code == 201
         r = client.patch(

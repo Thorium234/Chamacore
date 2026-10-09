@@ -1,6 +1,7 @@
 """Shared test fixtures: in-process SQLite DB, seeded roles, TestClient, auth helpers."""
 
 import os
+import uuid
 from hashlib import sha256
 
 os.environ.setdefault("CHAMACORE_DEBUG", "true")
@@ -17,7 +18,8 @@ from app.db.bootstrap import ensure_system_user
 from app.db.ledger_guards import create_ledger_guards
 from app.db.session import get_db
 from app.main import app as fastapi_app
-from app.models.enums import RoleName
+from app.models.chama import Chama
+from app.models.enums import ChamaStatus, RoleName
 from app.models.role import Role
 
 # import all models so Base.metadata is populated
@@ -101,6 +103,7 @@ def client(db):
 
     try:
         with TestClient(fastapi_app) as c:
+            c.test_db = db
             yield c
     finally:
         fastapi_app.dependency_overrides.clear()
@@ -121,7 +124,7 @@ def get_concurrency_engine(tmp_path):
     return engine
 
 
-def register_and_login(client, email: str = "user@example.com", password: str = "Secret123!") -> dict:
+def register_and_login(client, email: str = "user@example.com", password: str = "StrongTestPassword123!") -> dict:
     """Register a user and return the auth header dict."""
     identity_suffix = int(sha256(email.encode()).hexdigest()[:8], 16) % 10_000_000
     r = client.post(
@@ -134,6 +137,7 @@ def register_and_login(client, email: str = "user@example.com", password: str = 
                 "last_name": "User",
                 "phone_number": f"+2547{identity_suffix:07d}",
                 "government_id": f"TEST-{identity_suffix:07d}",
+                "email": email,
             },
         },
     )
@@ -143,7 +147,27 @@ def register_and_login(client, email: str = "user@example.com", password: str = 
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
-def create_chama(client, headers: dict, *, name: str = "Test Chama", fee: str = "100.00", phone: str = "+254700000001", govt: str = "GID-001") -> dict:
+def register_unlinked_and_login(
+    client, email: str = "unlinked@example.com", password: str = "StrongTestPassword123!"
+) -> dict:
+    """Register an account without a member record, then return its auth header."""
+    r = client.post("/api/v1/auth/register", json={"email": email, "password": password})
+    assert r.status_code == 201, f"register failed: {r.json()}"
+    r = client.post("/api/v1/auth/token", data={"username": email, "password": password})
+    assert r.status_code == 200, f"login failed: {r.json()}"
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+def create_chama(
+    client,
+    headers: dict,
+    *,
+    name: str = "Test Chama",
+    fee: str = "100.00",
+    phone: str = "+254700000001",
+    govt: str = "GID-001",
+    activate: bool = True,
+) -> dict:
     r = client.post(
         "/api/v1/chamas",
         headers=headers,
@@ -154,14 +178,32 @@ def create_chama(client, headers: dict, *, name: str = "Test Chama", fee: str = 
         },
     )
     assert r.status_code == 201, f"create_chama failed: {r.status_code} {r.json()}"
-    return r.json()
+    result = r.json()
+    if activate:
+        chama = client.test_db.get(Chama, uuid.UUID(result["id"]))
+        assert chama is not None
+        chama.status = ChamaStatus.ACTIVE
+        client.test_db.commit()
+        result["status"] = ChamaStatus.ACTIVE.value
+    return result
 
 
-def add_membership(client, headers, chama_id: str, *, phone: str = "+254700000099", govt: str = "GID-099", first: str = "Bob", last: str = "Otieno") -> dict:
+def add_membership(
+    client,
+    headers,
+    chama_id: str,
+    *,
+    phone: str = "+254700000099",
+    govt: str = "GID-099",
+    first: str = "Bob",
+    last: str = "Otieno",
+    email: str | None = None,
+) -> dict:
+    member_email = email or f"member-{govt.lower()}@example.com"
     r = client.post(
         f"/api/v1/chamas/{chama_id}/memberships",
         headers=headers,
-        json={"member": {"first_name": first, "last_name": last, "phone_number": phone, "government_id": govt, "email": f"member-{govt.lower()}@example.com"}},
+        json={"member": {"first_name": first, "last_name": last, "phone_number": phone, "government_id": govt, "email": member_email}},
     )
     assert r.status_code == 201, f"add_membership failed: {r.status_code} {r.json()}"
     return r.json()

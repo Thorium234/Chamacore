@@ -21,7 +21,7 @@ def _add_member(client, chair, chama_id, *, phone="+254700001199", govt="GID-119
     r = client.post(
         f"/api/v1/chamas/{chama_id}/memberships",
         headers=chair,
-        json={"member": {"first_name": first, "last_name": last, "phone_number": phone, "government_id": govt}},
+        json={"member": {"first_name": first, "last_name": last, "phone_number": phone, "government_id": govt, "email": f"member-{govt.lower()}@example.com"}},
     )
     assert r.status_code == 201, r.json()
     return r.json()

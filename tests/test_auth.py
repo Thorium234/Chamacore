@@ -2,7 +2,12 @@
 
 import pytest
 
-from tests.conftest import add_membership, create_chama, register_and_login
+from tests.conftest import (
+    add_membership,
+    create_chama,
+    register_and_login,
+    register_unlinked_and_login,
+)
 
 
 class TestRegister:
@@ -87,24 +92,34 @@ class TestMe:
 
 
 class TestMemberLink:
-    def test_link_claims_member_identity(self, client):
+    def test_added_member_can_log_in_and_is_linked_automatically(self, client):
         chair = register_and_login(client, "chair@example.com")
         chama = create_chama(client, chair)
-        add_membership(client, chair, chama["id"], phone="+254700000771", govt="GID-771")
-        headers = register_and_login(client, "member@example.com")
-        r = client.post(
-            "/api/v1/auth/me/member-link",
-            headers=headers,
-            json={"phone_number": "+254700000771", "government_id": "GID-771"},
+        membership = add_membership(
+            client, chair, chama["id"], phone="+254700000771", govt="GID-771"
         )
-        assert r.status_code == 200
-        assert r.json()["member_id"]
+        login = client.post(
+            "/api/v1/auth/token",
+            data={"username": "+254700000771", "password": "GID-771"},
+        )
+        assert login.status_code == 200, login.json()
+        assert login.json()["must_change_password"] is True
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        changed = client.post(
+            "/api/v1/auth/change-password",
+            headers=headers,
+            json={"current_password": "GID-771", "new_password": "MemberChangedPass123!"},
+        )
+        assert changed.status_code == 200, changed.json()
+        me = client.get("/api/v1/auth/me", headers=headers)
+        assert me.status_code == 200
+        assert me.json()["member_id"] == membership["member_id"]
 
     def test_link_rejects_wrong_government_id(self, client):
         chair = register_and_login(client, "chair2@example.com")
         chama = create_chama(client, chair)
         add_membership(client, chair, chama["id"], phone="+254700000772", govt="GID-772")
-        headers = register_and_login(client, "member2@example.com")
+        headers = register_unlinked_and_login(client, "member2@example.com")
         r = client.post(
             "/api/v1/auth/me/member-link",
             headers=headers,

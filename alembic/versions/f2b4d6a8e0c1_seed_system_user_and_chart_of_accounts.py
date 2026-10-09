@@ -25,7 +25,7 @@ def upgrade() -> None:
     bind.execute(
         sa.text(
             "INSERT INTO users (id, email, password_hash, is_active) "
-            "VALUES (:id, :email, :password_hash, 1) "
+            "VALUES (:id, :email, :password_hash, TRUE) "
             "ON CONFLICT (email) DO NOTHING"
         ),
         {

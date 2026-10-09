@@ -26,7 +26,7 @@ from app.models.membership import Membership
 from app.models.payment_event import PaymentEvent
 from app.providers.errors import ProviderIntegrationError
 from app.services.ledger import CONTRIBUTION_SOURCE_TYPE
-from tests.conftest import register_and_login
+from tests.conftest import create_chama, register_and_login
 from tests.fake_provider import restore_fake_adapter, setup_fake_adapter
 
 DARAJA = PaymentProviderCode.DARAJA.value
@@ -53,22 +53,14 @@ def _c2b_payload(*, trans_id="RKTQDM7W6w", amount="100", short_code="600598", bi
 
 def _setup(client):
     headers = register_and_login(client, "c2b@e.com")
-    r = client.post(
-        "/api/v1/chamas",
-        headers=headers,
-        json={
-            "name": "C2B Chama",
-            "registration_fee_amount": "100.00",
-            "member": {
-                "first_name": "Alice",
-                "last_name": "Wanjiku",
-                "phone_number": "+254700000201",
-                "government_id": "GID-201",
-            },
-        },
+    chama = create_chama(
+        client,
+        headers,
+        name="C2B Chama",
+        fee="100.00",
+        phone="+254700000201",
+        govt="GID-201",
     )
-    assert r.status_code == 201
-    chama = r.json()
     r = client.post(
         f"/api/v1/chamas/{chama['id']}/payment-connections",
         headers=headers,
@@ -361,6 +353,7 @@ class TestC2BRegisterUrls:
                     "last_name": "Kimani",
                     "phone_number": "+254700000202",
                     "government_id": "GID-202",
+                    "email": "member-202@example.com",
                 }
             },
         )

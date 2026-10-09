@@ -51,6 +51,8 @@ class PlatformUserOut(BaseModel):
 
 
 class PlatformAdminGrantRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr
 
 

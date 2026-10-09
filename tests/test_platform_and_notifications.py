@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.models.enums import MembershipStatus, RoleName
 from app.models.membership import Membership
@@ -201,11 +201,12 @@ class TestPlatformAdminGrants:
     def test_grant_and_revoke(self, client, db):
         _make_admin(client, db)
         admin = _admin_headers(client)
-        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "secret123"})
+        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "OldPassword123!"})
         target = db.scalar(select(User).where(User.email == "user@e.com"))
         r = client.post(
-            f"/api/v1/platform/users/{target.id}/roles/PLATFORM_ADMIN",
+            "/api/v1/platform/admins",
             headers=admin,
+            json={"email": "user@e.com"},
         )
         assert r.status_code == 201, r.json()
         assert r.json()["platform_roles"] == ["PLATFORM_ADMIN"]
@@ -213,7 +214,7 @@ class TestPlatformAdminGrants:
             select(UserPlatformRole).where(UserPlatformRole.user_id == target.id)
         ) is not None
         d = client.delete(
-            f"/api/v1/platform/users/{target.id}/roles/PLATFORM_ADMIN",
+            f"/api/v1/platform/admins/{target.id}",
             headers=admin,
         )
         assert d.status_code == 200
@@ -224,11 +225,13 @@ class TestPlatformAdminGrants:
     def test_granting_twice_conflicts(self, client, db):
         _make_admin(client, db)
         admin = _admin_headers(client)
-        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "secret123"})
+        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "OldPassword123!"})
         target = db.scalar(select(User).where(User.email == "user@e.com"))
-        client.post(f"/api/v1/platform/users/{target.id}/roles/PLATFORM_ADMIN", headers=admin)
+        client.post(
+            "/api/v1/platform/admins", headers=admin, json={"email": "user@e.com"}
+        )
         again = client.post(
-            f"/api/v1/platform/users/{target.id}/roles/PLATFORM_ADMIN", headers=admin
+            "/api/v1/platform/admins", headers=admin, json={"email": "user@e.com"}
         )
         assert again.status_code == 409
 
@@ -236,32 +239,35 @@ class TestPlatformAdminGrants:
         admin_id = _make_admin(client, db)
         admin = _admin_headers(client)
         r = client.delete(
-            f"/api/v1/platform/users/{admin_id}/roles/PLATFORM_ADMIN", headers=admin
+            f"/api/v1/platform/admins/{admin_id}", headers=admin
         )
         assert r.status_code == 400
 
     def test_last_admin_cannot_be_revoked(self, client, db):
         admin_id = _make_admin(client, db)
         admin = _admin_headers(client)
-        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "secret123"})
+        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "OldPassword123!"})
         target = db.scalar(select(User).where(User.email == "user@e.com"))
-        client.post(f"/api/v1/platform/users/{target.id}/roles/PLATFORM_ADMIN", headers=admin)
+        client.post(
+            "/api/v1/platform/admins", headers=admin, json={"email": "user@e.com"}
+        )
         # revoke the other admin first: allowed, two admins exist
         r = client.delete(
-            f"/api/v1/platform/users/{target.id}/roles/PLATFORM_ADMIN", headers=admin
+            f"/api/v1/platform/admins/{target.id}", headers=admin
         )
         assert r.status_code == 200
         # now the caller is the only admin and cannot revoke themselves
         self_only = client.delete(
-            f"/api/v1/platform/users/{admin_id}/roles/PLATFORM_ADMIN", headers=admin
+            f"/api/v1/platform/admins/{admin_id}", headers=admin
         )
         assert self_only.status_code == 400
 
     def test_non_admin_cannot_grant(self, client, db):
         headers = register_and_login(client, "chair@e.com")
         r = client.post(
-            f"/api/v1/platform/users/{uuid.uuid4()}/roles/PLATFORM_ADMIN",
+            "/api/v1/platform/admins",
             headers=headers,
+            json={"email": "nobody@example.com"},
         )
         assert r.status_code == 403
 
@@ -285,20 +291,22 @@ class TestPlatformAdminGrants:
     def test_only_platform_admin_role_is_grantable(self, client, db):
         _make_admin(client, db)
         admin = _admin_headers(client)
-        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "secret123"})
+        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "OldPassword123!"})
         target = db.scalar(select(User).where(User.email == "user@e.com"))
         r = client.post(
-            f"/api/v1/platform/users/{target.id}/roles/TREASURER", headers=admin
+            "/api/v1/platform/admins",
+            headers=admin,
+            json={"email": "user@e.com", "role": "TREASURER"},
         )
-        assert r.status_code == 400
+        assert r.status_code == 422
 
     def test_revoke_unassigned_is_404(self, client, db):
         _make_admin(client, db)
         admin = _admin_headers(client)
-        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "secret123"})
+        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "OldPassword123!"})
         target = db.scalar(select(User).where(User.email == "user@e.com"))
         r = client.delete(
-            f"/api/v1/platform/users/{target.id}/roles/PLATFORM_ADMIN", headers=admin
+            f"/api/v1/platform/admins/{target.id}", headers=admin
         )
         assert r.status_code == 404
 
@@ -310,7 +318,7 @@ class TestPlatformStats:
 
     def test_counts_chamas_and_users(self, client, db):
         headers = register_and_login(client, "chair@e.com")
-        create_chama(client, headers, name="Stats Chama", fee="0.00")
+        create_chama(client, headers, name="Stats Chama", fee="0.00", activate=False)
         _make_admin(client, db)
         admin = _admin_headers(client)
         r = client.get("/api/v1/platform/stats", headers=admin)
@@ -410,7 +418,7 @@ class TestMustChangePassword:
     def test_login_reports_must_change_password(self, client, db):
         _make_admin(client, db)
         admin = _admin_headers(client)
-        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "secret123"})
+        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "OldPassword123!"})
         target = db.scalar(select(User).where(User.email == "user@e.com"))
         r = client.post(
             f"/api/v1/platform/users/{target.id}/require-password-change",
@@ -420,35 +428,35 @@ class TestMustChangePassword:
         assert r.status_code == 200, r.json()
         assert r.json()["must_change_password"] is True
         login = client.post(
-            "/api/v1/auth/token", data={"username": "user@e.com", "password": "secret123"}
+            "/api/v1/auth/token", data={"username": "user@e.com", "password": "OldPassword123!"}
         )
         assert login.status_code == 200
         assert login.json()["must_change_password"] is True
 
     def test_default_login_flag_is_false(self, client):
-        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "secret123"})
+        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "OldPassword123!"})
         login = client.post(
-            "/api/v1/auth/token", data={"username": "user@e.com", "password": "secret123"}
+            "/api/v1/auth/token", data={"username": "user@e.com", "password": "OldPassword123!"}
         )
         assert login.json()["must_change_password"] is False
 
     def test_change_password_clears_flag_and_revokes_refresh(self, client, db):
         _make_admin(client, db)
         admin = _admin_headers(client)
-        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "secret123"})
+        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "OldPassword123!"})
         target = db.scalar(select(User).where(User.email == "user@e.com"))
         client.post(
             f"/api/v1/platform/users/{target.id}/require-password-change", headers=admin
         )
         login = client.post(
-            "/api/v1/auth/token", data={"username": "user@e.com", "password": "secret123"}
+            "/api/v1/auth/token", data={"username": "user@e.com", "password": "OldPassword123!"}
         )
         headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
         stale_refresh = login.json()["refresh_token"]
         r = client.post(
             "/api/v1/auth/change-password",
             headers=headers,
-            json={"current_password": "secret123", "new_password": "brandnew456"},
+            json={"current_password": "OldPassword123!", "new_password": "NewPassword456!"},
         )
         assert r.status_code == 200, r.json()
         assert r.json()["must_change_password"] is False
@@ -459,7 +467,7 @@ class TestMustChangePassword:
         assert stale.status_code == 401
         # the new password works and the flag is cleared
         again = client.post(
-            "/api/v1/auth/token", data={"username": "user@e.com", "password": "brandnew456"}
+            "/api/v1/auth/token", data={"username": "user@e.com", "password": "NewPassword456!"}
         )
         assert again.status_code == 200
         assert again.json()["must_change_password"] is False
@@ -469,46 +477,48 @@ class TestMustChangePassword:
         r = client.post(
             "/api/v1/auth/change-password",
             headers=headers,
-            json={"current_password": "wrongpass", "new_password": "brandnew456"},
+            json={"current_password": "wrongpass", "new_password": "NewPassword456!"},
         )
         assert r.status_code == 400
 
     def test_same_password_rejected(self, client):
-        headers = register_and_login(client, "user@e.com")
+        password = "StrongTestPassword123!"
+        headers = register_and_login(client, "user@e.com", password=password)
         r = client.post(
             "/api/v1/auth/change-password",
             headers=headers,
-            json={"current_password": "secret123", "new_password": "secret123"},
+            json={"current_password": password, "new_password": password},
         )
         assert r.status_code == 400
         assert "different" in r.json()["detail"].lower()
 
     def test_short_new_password_rejected(self, client):
-        headers = register_and_login(client, "user@e.com")
+        password = "StrongTestPassword123!"
+        headers = register_and_login(client, "user@e.com", password=password)
         r = client.post(
             "/api/v1/auth/change-password",
             headers=headers,
-            json={"current_password": "secret123", "new_password": "short"},
+            json={"current_password": password, "new_password": "short"},
         )
         assert r.status_code == 422
 
     def test_change_password_requires_auth(self, client):
         r = client.post(
             "/api/v1/auth/change-password",
-            json={"current_password": "secret123", "new_password": "brandnew456"},
+            json={"current_password": "OldPassword123!", "new_password": "NewPassword456!"},
         )
         assert r.status_code == 401
 
     def test_refresh_preserves_must_change_flag(self, client, db):
         _make_admin(client, db)
         admin = _admin_headers(client)
-        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "secret123"})
+        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "OldPassword123!"})
         target = db.scalar(select(User).where(User.email == "user@e.com"))
         client.post(
             f"/api/v1/platform/users/{target.id}/require-password-change", headers=admin
         )
         login = client.post(
-            "/api/v1/auth/token", data={"username": "user@e.com", "password": "secret123"}
+            "/api/v1/auth/token", data={"username": "user@e.com", "password": "OldPassword123!"}
         ).json()
         refreshed = client.post(
             "/api/v1/auth/refresh", json={"refresh_token": login["refresh_token"]}
@@ -518,7 +528,7 @@ class TestMustChangePassword:
 
     def test_non_admin_cannot_force_password_change(self, client, db):
         headers = register_and_login(client, "chair@e.com")
-        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "secret123"})
+        client.post("/api/v1/auth/register", json={"email": "user@e.com", "password": "OldPassword123!"})
         target = db.scalar(select(User).where(User.email == "user@e.com"))
         r = client.post(
             f"/api/v1/platform/users/{target.id}/require-password-change", headers=headers
@@ -531,20 +541,33 @@ class TestNotifications:
         headers = register_and_login(client, "chair@e.com")
         chama = create_chama(client, headers, name="Notify Chama", fee="0.00")
         member = add_membership(
-            client, headers, chama["id"], phone="+254700000321", govt="GID-321"
+            client,
+            headers,
+            chama["id"],
+            phone="+254700000321",
+            govt="GID-321",
+            email="member@e.com",
         )
+        # The fixture needs an existing member account; discard its welcome
+        # notification so each test can assert only the action it triggers.
+        db.execute(
+            delete(Notification).where(
+                Notification.chama_id == uuid.UUID(chama["id"])
+            )
+        )
+        db.commit()
         return headers, chama, member
 
     def _member_headers(self, client, phone="+254700000321", govt="GID-321", email="member@e.com"):
-        client.post("/api/v1/auth/register", json={"email": email, "password": "secret123"})
-        r = client.post("/api/v1/auth/token", data={"username": email, "password": "secret123"})
+        r = client.post("/api/v1/auth/token", data={"username": phone, "password": govt})
+        assert r.status_code == 200, r.json()
         headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
-        link = client.post(
-            "/api/v1/auth/me/member-link",
+        changed = client.post(
+            "/api/v1/auth/change-password",
             headers=headers,
-            json={"phone_number": phone, "government_id": govt},
+            json={"current_password": govt, "new_password": "MemberChangedPass123!"},
         )
-        assert link.status_code == 200, link.json()
+        assert changed.status_code == 200, changed.json()
         return headers
 
     def test_list_requires_auth(self, client):
@@ -622,10 +645,10 @@ class TestNotifications:
 
     def test_notifications_are_scoped_per_user(self, client, db):
         headers, chama, member = self._chair_with_member(client, db)
-        first = self._member_headers(client, email="m1@e.com")
-        client.post("/api/v1/auth/register", json={"email": "m2@e.com", "password": "secret123"})
+        first = self._member_headers(client)
+        client.post("/api/v1/auth/register", json={"email": "m2@e.com", "password": "OldPassword123!"})
         r = client.post(
-            "/api/v1/auth/token", data={"username": "m2@e.com", "password": "secret123"}
+            "/api/v1/auth/token", data={"username": "m2@e.com", "password": "OldPassword123!"}
         )
         second = {"Authorization": f"Bearer {r.json()['access_token']}"}
         client.post(
@@ -802,11 +825,7 @@ class TestNotifications:
             select(AuditEvent).where(AuditEvent.action == "contribution.create")
         ).all()
         assert len(events) == 1
-        # The chair is the only member user and is the actor, so nothing is
-        # addressed to anyone: the audit trail is recorded, no feed rows leak.
-        assert (
-            db.scalar(
-                select(Notification).where(Notification.action == "contribution.create")
-            )
-            is None
+        notification = db.scalar(
+            select(Notification).where(Notification.action == "contribution.create")
         )
+        assert notification is not None

@@ -43,7 +43,7 @@ class TestRecordContribution:
         r = client.post(
             f"/api/v1/chamas/{chama['id']}/memberships",
             headers=headers_chair,
-            json={"member": {"first_name": "T", "last_name": "R", "phone_number": "+254700000620", "government_id": "GID-620"}},
+            json={"member": {"first_name": "T", "last_name": "R", "phone_number": "+254700000620", "government_id": "GID-620", "email": "treasurer@example.com"}},
         )
         treas_id = r.json()["id"]
         r = client.post(
@@ -52,16 +52,20 @@ class TestRecordContribution:
             json={"role": "TREASURER"},
         )
         assert r.status_code == 201
-        # treasurer registers and claims their member identity
-        client.post("/api/v1/auth/register", json={"email": "t@e.com", "password": "password123"})
-        r = client.post("/api/v1/auth/token", data={"username": "t@e.com", "password": "password123"})
-        headers_treas = {"Authorization": f"Bearer {r.json()['access_token']}"}
+        # New member accounts are linked on creation and must change their
+        # government-ID password before using protected Chama endpoints.
         r = client.post(
-            "/api/v1/auth/me/member-link",
-            headers=headers_treas,
-            json={"phone_number": "+254700000620", "government_id": "GID-620"},
+            "/api/v1/auth/token",
+            data={"username": "+254700000620", "password": "GID-620"},
         )
         assert r.status_code == 200, r.json()
+        headers_treas = {"Authorization": f"Bearer {r.json()['access_token']}"}
+        changed = client.post(
+            "/api/v1/auth/change-password",
+            headers=headers_treas,
+            json={"current_password": "GID-620", "new_password": "MemberChangedPass123!"},
+        )
+        assert changed.status_code == 200, changed.json()
         r = client.post(
             f"/api/v1/chamas/{chama['id']}/contributions",
             headers=headers_treas,
@@ -73,9 +77,18 @@ class TestRecordContribution:
         headers_chair = register_and_login(client, "chair@e.com")
         chama = create_chama(client, headers_chair, fee="0.00")
         m = add_membership(client, headers_chair, chama["id"], phone="+254700000630", govt="GID-630")
-        client.post("/api/v1/auth/register", json={"email": "mem@e.com", "password": "password123"})
-        r = client.post("/api/v1/auth/token", data={"username": "mem@e.com", "password": "password123"})
+        r = client.post(
+            "/api/v1/auth/token",
+            data={"username": "+254700000630", "password": "GID-630"},
+        )
+        assert r.status_code == 200, r.json()
         headers_mem = {"Authorization": f"Bearer {r.json()['access_token']}"}
+        changed = client.post(
+            "/api/v1/auth/change-password",
+            headers=headers_mem,
+            json={"current_password": "GID-630", "new_password": "MemberChangedPass123!"},
+        )
+        assert changed.status_code == 200, changed.json()
         r = client.post(
             f"/api/v1/chamas/{chama['id']}/contributions",
             headers=headers_mem,
@@ -250,8 +263,8 @@ class TestConfirmContribution:
         )
         contrib_id = r.json()["id"]
         # log in as ordinary member
-        client.post("/api/v1/auth/register", json={"email": "nonchair@e.com", "password": "password123"})
-        r = client.post("/api/v1/auth/token", data={"username": "nonchair@e.com", "password": "password123"})
+        client.post("/api/v1/auth/register", json={"email": "nonchair@e.com", "password": "StrongTestPassword123!"})
+        r = client.post("/api/v1/auth/token", data={"username": "nonchair@e.com", "password": "StrongTestPassword123!"})
         headers_non = {"Authorization": f"Bearer {r.json()['access_token']}"}
         r = client.post(f"/api/v1/chamas/{chama['id']}/contributions/{contrib_id}/confirm", headers=headers_non)
         assert r.status_code == 403
@@ -466,8 +479,8 @@ class TestListContributions:
 
     def test_non_member_cannot_list(self, client):
         headers, chama, m = _setup_contributing_chama(client)
-        client.post("/api/v1/auth/register", json={"email": "stranger@e.com", "password": "password123"})
-        r = client.post("/api/v1/auth/token", data={"username": "stranger@e.com", "password": "password123"})
+        client.post("/api/v1/auth/register", json={"email": "stranger@e.com", "password": "StrongTestPassword123!"})
+        r = client.post("/api/v1/auth/token", data={"username": "stranger@e.com", "password": "StrongTestPassword123!"})
         headers_s = {"Authorization": f"Bearer {r.json()['access_token']}"}
         r = client.get(f"/api/v1/chamas/{chama['id']}/contributions", headers=headers_s)
         assert r.status_code == 403
