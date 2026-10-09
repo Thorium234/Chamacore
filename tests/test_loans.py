@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from tests.conftest import add_membership, create_chama, register_and_login
+from tests.conftest import add_membership, create_chama, login_added_member, register_and_login
 
 PERIOD = "2026-09"
 
@@ -19,14 +19,7 @@ def _backdate(db, membership_id, days=40):
 
 
 def _link_bob(client, email="bob@e.com", phone="+254700000099", govt="GID-099"):
-    headers = register_and_login(client, email)
-    r = client.post(
-        "/api/v1/auth/me/member-link",
-        headers=headers,
-        json={"phone_number": phone, "government_id": govt},
-    )
-    assert r.status_code == 200, r.json()
-    return headers
+    return login_added_member(client, phone=phone, government_id=govt)
 
 
 def _fund(client, headers, chama_id, membership_id, amount, period=PERIOD):

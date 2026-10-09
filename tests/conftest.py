@@ -158,6 +158,30 @@ def register_unlinked_and_login(
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
+def login_added_member(
+    client,
+    *,
+    phone: str,
+    government_id: str,
+    new_password: str = "MemberChangedPass123!",
+) -> dict:
+    """Log in with the initial credentials issued when a member is added."""
+    r = client.post(
+        "/api/v1/auth/token",
+        data={"username": phone, "password": government_id},
+    )
+    assert r.status_code == 200, f"member login failed: {r.json()}"
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    if r.json().get("must_change_password"):
+        changed = client.post(
+            "/api/v1/auth/change-password",
+            headers=headers,
+            json={"current_password": government_id, "new_password": new_password},
+        )
+        assert changed.status_code == 200, f"member password change failed: {changed.json()}"
+    return headers
+
+
 def create_chama(
     client,
     headers: dict,

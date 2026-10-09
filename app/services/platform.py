@@ -327,11 +327,17 @@ class PlatformService:
                 if chama.created_by.member is not None
                 else None
             ),
-            membership_count=len(chama.memberships),
-            active_member_count=sum(
-                1
-                for membership in chama.memberships
-                if membership.status == MembershipStatus.ACTIVE
+            membership_count=self.db.scalar(
+                select(func.count(Membership.id)).where(
+                    Membership.chama_id == chama.id
+                )
+            )
+            or 0,
+            active_member_count=self.db.scalar(
+                select(func.count(Membership.id)).where(
+                    Membership.chama_id == chama.id,
+                    Membership.status == MembershipStatus.ACTIVE,
+                )
             ),
             created_at=chama.created_at,
             updated_at=chama.updated_at,

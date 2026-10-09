@@ -15,7 +15,13 @@ from app.models.membership import Membership
 from app.models.registration_fee import RegistrationFee
 from app.models.share import Share
 
-from tests.conftest import add_membership, create_chama, register_and_login
+from tests.conftest import (
+    add_membership,
+    create_chama,
+    login_added_member,
+    register_and_login,
+    register_unlinked_and_login,
+)
 
 import app.models  # noqa: F401
 
@@ -26,17 +32,18 @@ class TestP0IdentityClaim:
     def test_second_claim_returns_409(self, client):
         chair = register_and_login(client, "chair@example.com")
         chama = create_chama(client, chair)
-        add_membership(client, chair, chama["id"], phone="+254700000900", govt="GID-900")
-        # First account claims the member
-        first = register_and_login(client, "first@example.com")
-        r = client.post(
-            "/api/v1/auth/me/member-link",
-            headers=first,
-            json={"phone_number": "+254700000900", "government_id": "GID-900"},
+        member = add_membership(
+            client, chair, chama["id"], phone="+254700000900", govt="GID-900"
         )
-        assert r.status_code == 200
-        # Second account tries to claim the same member
-        second = register_and_login(client, "second@example.com")
+        # Adding the member provisions their account and links the identity.
+        first = login_added_member(
+            client, phone="+254700000900", government_id="GID-900"
+        )
+        me = client.get("/api/v1/auth/me", headers=first)
+        assert me.status_code == 200
+        assert me.json()["member_id"] == member["member_id"]
+        # A second account cannot claim the identity already linked above.
+        second = register_unlinked_and_login(client, "second@example.com")
         r = client.post(
             "/api/v1/auth/me/member-link",
             headers=second,

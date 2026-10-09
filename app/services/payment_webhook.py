@@ -354,36 +354,21 @@ class PaymentWebhookService:
                 intent.last_transition_by_user_id = None
             settled = False
             if intent.contribution_id is not None:
-                settle_linked_contribution(self.db, payment_intent=intent)
-                settled = True
-            elif intent.purpose and "contribution" in intent.purpose.lower():
-                # Auto-link/create pending contribution for this payment intent
-                from app.models.enums import ContributionStatus
-                from app.services.contribution import ContributionService
-                from app.db.bootstrap import ensure_system_user
-                cs = ContributionService(self.db)
-                # Try to find pending contribution matching membership/amount
-                contrib = cs.contributions.get_by_id(intent.contribution_id) if intent.contribution_id else None
-                if contrib is None:
-                    # Create a pending contribution; use current period if sensible? default to today month
-                    from datetime import date
-                    today = date.today()
-                    period = f"{today.year:04d}-{today.month:02d}"
-                    contrib = cs.create_contribution(
-                        actor=ensure_system_user(self.db),
-                        chama_id=intent.chama_id,
-                        membership_id=intent.membership_id,
-                        amount=intent.amount,
-                        period=period,
-                        payment_date=today,
+                settled = settle_linked_contribution(
+                    self.db, payment_intent=intent
+                )
+                if settled:
+                    received_at = event.received_at
+                    elapsed_seconds = max(
+                        0.0,
+                        (
+                            datetime.now(received_at.tzinfo) - received_at
+                        ).total_seconds(),
                     )
-                # If still pending, settle it
-                if contrib.status == ContributionStatus.PENDING:
-                    cs._settle(contrib, ensure_system_user(self.db), allow_already_confirmed=True)
-                # Link intent to contribution if not already
-                if intent.contribution_id is None:
-                    intent.contribution_id = contrib.id
-                settled = True
+                    payment_settlement_seconds.observe(
+                        elapsed_seconds,
+                        (event.provider_code.value, event.environment.value),
+                    )
         else:
             attempt.status = PaymentAttemptStatus.FAILED
             attempt.completed_at = now

@@ -364,6 +364,18 @@ class TestWebhookMetrics:
         headers, chama, member, conn, intent, attempt, contribution = _linked_setup(
             client, fake_jenga, key="webhook-metrics-1"
         )
+        metric_prefix = (
+            'chamacore_payment_settlement_seconds_count'
+            '{provider="JENGA",environment="SANDBOX"} '
+        )
+
+        def settlement_count() -> int:
+            for line in REGISTRY.render().splitlines():
+                if line.startswith(metric_prefix):
+                    return int(float(line[len(metric_prefix) :]))
+            return 0
+
+        previous_settlements = settlement_count()
         url = _callback_url(conn)
         body = _webhook_payload(provider_request_id=attempt["provider_request_id"])
         r = client.post(url, content=json.dumps(body).encode(), headers={"content-type": "application/json"})
@@ -382,8 +394,7 @@ class TestWebhookMetrics:
             in rendered
         )
         assert (
-            'chamacore_payment_settlement_seconds_count{provider="JENGA",environment="SANDBOX"} 1'
-            in rendered
+            settlement_count() == previous_settlements + 1
         )
 
     def test_linked_setup_initiation_counter_records_attempt_outcomes(

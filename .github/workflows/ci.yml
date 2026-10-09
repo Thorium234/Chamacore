@@ -20,7 +20,7 @@ jobs:
       - name: Run Alembic migration (SQLite)
         run: alembic upgrade head
       - name: Run tests (SQLite)
-        run: pytest -q
+        run: pytest -q -m "not concurrency"
 
   test-postgres:
     runs-on: ubuntu-latest

@@ -152,6 +152,8 @@ class AuthService:
         """
         if not verify_password(current_password, user.password_hash):
             raise StateError("The current password is incorrect")
+        if verify_password(new_password, user.password_hash):
+            raise StateError("The new password must be different from the current password")
         validate_password(
             new_password,
             email=user.email,

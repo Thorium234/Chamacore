@@ -5,6 +5,7 @@ import uuid
 from tests.conftest import (
     add_membership,
     create_chama,
+    login_added_member,
     register_and_login,
 )
 
@@ -48,18 +49,28 @@ def test_chairperson_can_download_chama_wide_statement(client, db):
 
 
 def test_treasurer_can_download_chama_wide_statement(client, db):
-    headers = register_and_login(client, "treas@e.com")
-    chama = create_chama(client, headers, name="Treas Chama", fee="0.00", phone="+254700010000", govt="GID-T1")
+    chair = register_and_login(client, "treas@e.com")
+    chama = create_chama(client, chair, name="Treas Chama", fee="0.00")
+    member = add_membership(
+        client,
+        chair,
+        chama["id"],
+        phone="+254700010000",
+        govt="GID-T1",
+        email="treasurer@example.com",
+    )
     # promote to treasurer
-    member = chama["membership_id"]
     role = client.post(
-        f"/api/v1/chamas/{chama['id']}/memberships/{member}/roles",
-        headers=headers,
+        f"/api/v1/chamas/{chama['id']}/memberships/{member['id']}/roles",
+        headers=chair,
         json={"role": "TREASURER"},
     )
     assert role.status_code == 201
 
-    r = client.get(f"/api/v1/chamas/{chama['id']}/statements", headers=headers)
+    treasurer = login_added_member(
+        client, phone="+254700010000", government_id="GID-T1"
+    )
+    r = client.get(f"/api/v1/chamas/{chama['id']}/statements", headers=treasurer)
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/pdf"
     assert r.content[:4] == b"%PDF"
