@@ -14,6 +14,7 @@ these tests only run when ``CHAMACORE_DATABASE_URL`` points at PostgreSQL.
 """
 
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -225,6 +226,7 @@ class TestPayoutCompletionSerialization:
             create_ledger_guards(conn)
             create_audit_guards(conn)
         scenario = _seed_scenario(engine)
+        threads = []
         try:
             results = []
             lock = threading.Lock()
@@ -239,13 +241,18 @@ class TestPayoutCompletionSerialization:
                         "results": results,
                         "lock": lock,
                     },
+                    daemon=True,
                 )
                 for i in range(2)
             ]
+            deadline = time.monotonic() + 60
             for t in threads:
                 t.start()
             for t in threads:
-                t.join(timeout=60)
+                t.join(timeout=max(0, deadline - time.monotonic()))
+
+            alive = [t.name for t in threads if t.is_alive()]
+            assert alive == [], f"payout-completion workers exceeded 60s: {alive}"
 
             errors = [r for r in results if r.startswith("error:")]
             assert errors == []
@@ -275,7 +282,8 @@ class TestPayoutCompletionSerialization:
             assert len(completed) == 1
             assert len(postings) == 1
         finally:
-            Base.metadata.drop_all(engine)
+            if not any(t.is_alive() for t in threads):
+                Base.metadata.drop_all(engine)
             engine.dispose()
 
 
@@ -287,6 +295,7 @@ class TestLoanDisbursementSerialization:
             create_ledger_guards(conn)
             create_audit_guards(conn)
         scenario = _seed_scenario(engine)
+        threads = []
         try:
             results = []
             lock = threading.Lock()
@@ -301,13 +310,18 @@ class TestLoanDisbursementSerialization:
                         "results": results,
                         "lock": lock,
                     },
+                    daemon=True,
                 )
                 for i in range(2)
             ]
+            deadline = time.monotonic() + 60
             for t in threads:
                 t.start()
             for t in threads:
-                t.join(timeout=60)
+                t.join(timeout=max(0, deadline - time.monotonic()))
+
+            alive = [t.name for t in threads if t.is_alive()]
+            assert alive == [], f"loan-disbursement workers exceeded 60s: {alive}"
 
             errors = [r for r in results if r.startswith("error:")]
             assert errors == []
@@ -337,5 +351,6 @@ class TestLoanDisbursementSerialization:
             assert len(disbursed) == 1
             assert len(postings) == 1
         finally:
-            Base.metadata.drop_all(engine)
+            if not any(t.is_alive() for t in threads):
+                Base.metadata.drop_all(engine)
             engine.dispose()

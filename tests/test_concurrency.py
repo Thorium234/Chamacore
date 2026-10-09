@@ -1,6 +1,7 @@
 """Concurrency test: membership numbers are safe under concurrent creation."""
 
 import threading
+import time
 import uuid
 from decimal import Decimal
 
@@ -70,8 +71,8 @@ class TestMembershipNumberConcurrency:
         def create_member(i):
             try:
                 for attempt in range(MAX_NUMBER_RETRIES):
+                    s = sf()
                     try:
-                        s = sf()
                         member = Member(
                             first_name=f"Member{i}",
                             last_name="T",
@@ -87,20 +88,30 @@ class TestMembershipNumberConcurrency:
                             membership_number=number,
                         )
                         s.commit()
-                        break
+                        return
                     except IntegrityError as exc:
                         s.rollback()
                         if "membership_number" in str(exc.orig) and attempt < MAX_NUMBER_RETRIES - 1:
                             continue
                         raise
+                    finally:
+                        s.close()
+                errors.append((i, RuntimeError("membership number retries exhausted")))
             except Exception as exc:
                 errors.append((i, exc))
 
-        threads = [threading.Thread(target=create_member, args=(i,)) for i in range(20)]
+        threads = [
+            threading.Thread(target=create_member, args=(i,), daemon=True)
+            for i in range(20)
+        ]
+        deadline = time.monotonic() + 30
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=30)
+            t.join(timeout=max(0, deadline - time.monotonic()))
+
+        alive = [t.name for t in threads if t.is_alive()]
+        assert alive == [], f"membership-number workers exceeded 30s: {alive}"
 
         assert errors == [], f"concurrency errors: {errors}"
 
@@ -205,13 +216,17 @@ class TestLedgerSourceConcurrency:
                 outcomes.append(("error", "retries exhausted"))
 
         threads = [
-            threading.Thread(target=post_amount, args=(Decimal("100.00"),)),
-            threading.Thread(target=post_amount, args=(Decimal("200.00"),)),
+            threading.Thread(target=post_amount, args=(Decimal("100.00"),), daemon=True),
+            threading.Thread(target=post_amount, args=(Decimal("200.00"),), daemon=True),
         ]
+        deadline = time.monotonic() + 30
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=30)
+            t.join(timeout=max(0, deadline - time.monotonic()))
+
+        alive = [t.name for t in threads if t.is_alive()]
+        assert alive == [], f"ledger-concurrency workers exceeded 30s: {alive}"
 
         statuses = sorted(status for status, _ in outcomes)
         assert statuses == ["conflict", "ok"], f"ledger concurrency outcomes: {outcomes}"

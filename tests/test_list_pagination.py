@@ -65,7 +65,7 @@ def _chama(db, user: User):
     return c
 
 
-def _membership(db, chama: Chama, member: Member, number: str):
+def _membership(db, chama: Chama, member: Member, number: int):
     m = Membership(
         chama_id=chama.id,
         member_id=member.id,
@@ -82,7 +82,7 @@ def _seed(db):
     user = _user(db)
     chama = _chama(db, user)
     member = _member(db, "+254000000001", "GID-SEED-1")
-    _membership(db, chama, member, "M0001")
+    _membership(db, chama, member, 1)
     db.commit()
     return user, chama
 
@@ -102,7 +102,7 @@ def _seed_memberships(db, user: User, chama: Chama, count: int):
                 db,
                 chama,
                 _member(db, f"+2540000{i+10:06d}", f"GID-SEED-X{i}"),
-                f"M{i+1:04d}",
+                i + 1,
             )
         )
 
@@ -159,7 +159,12 @@ class TestMembershipPagination:
     def test_limit_and_offset(self, db):
         user, chama = _seed(db)
         for i in range(1, 5):
-            _membership(db, chama, _member(db, f"+2540000000{i+1:02d}", f"GID-SEED-{i+1}"), f"M{i+1:04d}")
+            _membership(
+                db,
+                chama,
+                _member(db, f"+2540000000{i+1:02d}", f"GID-SEED-{i+1}"),
+                i + 1,
+            )
         db.commit()
 
         repo = MembershipRepository(db)

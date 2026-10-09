@@ -89,7 +89,7 @@ def _seed_payment_connection(db, user):
         Membership(
             chama_id=chama.id,
             member_id=member.id,
-            membership_number="M0001",
+            membership_number=1,
             status=MembershipStatus.ACTIVE,
         )
     )
