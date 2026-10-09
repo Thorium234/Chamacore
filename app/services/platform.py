@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, StateError
 from app.models.chama import Chama
-from app.models.enums import ChamaStatus, RoleName
+from app.models.enums import ChamaStatus, MembershipStatus, RoleName
+from app.models.member import Member
+from app.models.membership import Membership
 from app.models.user import User
 from app.models.user_platform_role import UserPlatformRole
 from app.repositories.user import UserRepository
@@ -132,6 +134,65 @@ class PlatformService:
         users = [self.users.get_by_id(user_id) for user_id in admin_ids]
         return [self._user_out(user) for user in users if user is not None]
 
+    def search_users(
+        self, *, actor: User, search: str, limit: int, offset: int
+    ) -> list[PlatformUserOut]:
+        require_platform_admin(self.db, user=actor)
+        return [
+            self._user_out(user)
+            for user in self.users.search(search, limit=limit, offset=offset)
+        ]
+
+    def require_password_change(
+        self, *, actor: User, user_id: uuid.UUID
+    ) -> PlatformUserOut:
+        require_platform_admin(self.db, user=actor)
+        target = self._get_user(user_id)
+        target.must_change_password = True
+        self.db.commit()
+        self.audit.record_commit(
+            actor=actor,
+            chama_id=None,
+            action=AuditAction.PLATFORM_USER_PASSWORD_CHANGE_REQUIRED,
+            resource_type="user",
+            resource_id=target.id,
+        )
+        return self._user_out(target)
+
+    def set_user_active(
+        self, *, actor: User, user_id: uuid.UUID, is_active: bool
+    ) -> PlatformUserOut:
+        require_platform_admin(self.db, user=actor)
+        target = self._get_user(user_id)
+        if target.id == actor.id and not is_active:
+            raise StateError("You cannot deactivate your own account")
+        if not is_active and self.platform_roles.has_role(
+            user_id=target.id, role=RoleName.PLATFORM_ADMIN
+        ):
+            active_admins = [
+                admin_id
+                for admin_id in self.platform_roles.list_admin_user_ids()
+                if (admin := self.users.get_by_id(admin_id)) is not None and admin.is_active
+            ]
+            if active_admins == [target.id]:
+                raise StateError("The last active PLATFORM_ADMIN cannot be deactivated")
+        if target.is_active == is_active:
+            return self._user_out(target)
+        target.is_active = is_active
+        self.db.commit()
+        self.audit.record_commit(
+            actor=actor,
+            chama_id=None,
+            action=(
+                AuditAction.PLATFORM_USER_REACTIVATED
+                if is_active
+                else AuditAction.PLATFORM_USER_DEACTIVATED
+            ),
+            resource_type="user",
+            resource_id=target.id,
+        )
+        return self._user_out(target)
+
     def grant_platform_admin_by_email(
         self, *, actor: User, data: PlatformAdminGrantRequest
     ) -> PlatformUserOut:
@@ -215,6 +276,8 @@ class PlatformService:
             suspended_chamas=self._chama_count(ChamaStatus.SUSPENDED)
             + self._chama_count(ChamaStatus.INACTIVE),
             dissolved_chamas=self._chama_count(ChamaStatus.DISSOLVED),
+            total_users=self._count(User),
+            total_members=self._count(Member),
             platform_admins=self._count(
                 UserPlatformRole, where=UserPlatformRole.role == RoleName.PLATFORM_ADMIN
             ),
@@ -240,6 +303,12 @@ class PlatformService:
             raise NotFoundError("Chama not found")
         return chama
 
+    def _get_user(self, user_id: uuid.UUID) -> User:
+        user = self.users.get_by_id(user_id)
+        if user is None:
+            raise NotFoundError("User not found")
+        return user
+
     def _chama_out(self, chama: Chama) -> PlatformChamaOut:
         return PlatformChamaOut(
             id=chama.id,
@@ -253,11 +322,28 @@ class PlatformService:
                 else None
             ),
             owner_email=chama.created_by.email,
+            owner_phone=(
+                chama.created_by.member.phone_number
+                if chama.created_by.member is not None
+                else None
+            ),
+            membership_count=len(chama.memberships),
+            active_member_count=sum(
+                1
+                for membership in chama.memberships
+                if membership.status == MembershipStatus.ACTIVE
+            ),
             created_at=chama.created_at,
             updated_at=chama.updated_at,
         )
 
     def _user_out(self, user: User) -> PlatformUserOut:
         out = PlatformUserOut.model_validate(user)
+        out.member_name = (
+            f"{user.member.first_name} {user.member.last_name}"
+            if user.member is not None
+            else None
+        )
+        out.member_phone = user.member.phone_number if user.member is not None else None
         out.platform_roles = [assignment.role for assignment in self.platform_roles.list_for_user(user_id=user.id)]
         return out

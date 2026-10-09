@@ -1,6 +1,7 @@
 """Shared test fixtures: in-process SQLite DB, seeded roles, TestClient, auth helpers."""
 
 import os
+from hashlib import sha256
 
 os.environ.setdefault("CHAMACORE_DEBUG", "true")
 
@@ -122,7 +123,20 @@ def get_concurrency_engine(tmp_path):
 
 def register_and_login(client, email: str = "user@example.com", password: str = "Secret123!") -> dict:
     """Register a user and return the auth header dict."""
-    r = client.post("/api/v1/auth/register", json={"email": email, "password": password})
+    identity_suffix = int(sha256(email.encode()).hexdigest()[:8], 16) % 10_000_000
+    r = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": password,
+            "member": {
+                "first_name": "Test",
+                "last_name": "User",
+                "phone_number": f"+2547{identity_suffix:07d}",
+                "government_id": f"TEST-{identity_suffix:07d}",
+            },
+        },
+    )
     assert r.status_code == 201, f"register failed: {r.json()}"
     r = client.post("/api/v1/auth/token", data={"username": email, "password": password})
     assert r.status_code == 200, f"login failed: {r.json()}"

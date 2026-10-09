@@ -155,20 +155,24 @@ readable, but all Chama-scoped mutations are blocked until a `PLATFORM_ADMIN`
 activates it. Suspended Chamas also remain read-only; only platform admins can
 change lifecycle status.
 
-An account may create one Chama. The creator's member identity is reconciled
-with their account (ADR-008):
+Chama creation is available only while the authenticated user's linked Member
+has no existing Membership (ADR-008):
 
 - If the user is **not yet linked** (`users.member_id` is NULL): a member is
   created from the request body and linked to the user.
-- If the user is **already linked**: the existing member becomes the creator's
-  initial chairperson membership; no duplicate Member record is created.
-  Existing Chama members can create their own Chama once, provided they have
-  not already created one.
+- If the user is **already linked but has no Chama membership**: the existing
+  member becomes the creator's initial chairperson membership; no duplicate
+  Member record is created.
+- If the linked Member already has a Membership in any Chama: creation returns
+  `409 Conflict`, regardless of `member` values in the request. Founding a
+  different Chama requires a separate account with a unique phone number and
+  government ID (ADR-007).
 
 Body: `{"name": "...", "registration_fee_amount": "100.00", "member": {"first_name": "...", "last_name": "...", "phone_number": "...", "government_id": "..."}}`.
 The `member` field is required only for an unlinked user. Returns 400 if
-`member` is missing for an unlinked user, 409 if the account already created a
-Chama, or on duplicate phone or government ID when creating a new member.
+`member` is missing for an unlinked user, 409 if the account's linked Member
+already belongs to a Chama, or on duplicate phone or government ID when
+creating a new member.
 
 ### `GET /api/v1/chamas`
 
@@ -680,18 +684,29 @@ Chama-level record access.
 
 ## Platform administration
 
-All `/api/v1/platform/*` endpoints require a global `PLATFORM_ADMIN` grant;
-that grant is separate from Chama membership and does not authorize member
-financial access. The console exposes platform lifecycle statistics, Chama
-name/owner/status listings, and status changes. Owner name and email identify
-the account that created the Chama; the console does not expose the member
-roster. It exposes only the
-platform-admin roster for global role management; it does not list Chama
-members or all user accounts. `GET /platform/admins` lists platform admins,
-`POST /platform/admins` grants the role to an existing account by email, and
-`DELETE /platform/admins/{user_id}` revokes it. Chama status is the available
-activation/suspension control. The current system does not yet have
-subscription plans, invoices, or subscription-payment records.
+All `/api/v1/platform/*` endpoints require a global `PLATFORM_ADMIN` grant.
+The grant is separate from Chama membership and never authorizes contribution,
+loan, payout, ledger, or payment-credential mutation.
+
+- `GET /platform/stats` reports Chama lifecycle counts, account count, member
+  count, and platform-admin count.
+- `GET /platform/chamas` searches by Chama name; each result includes the
+  creator's name, email, linked phone when available, created date, total
+  membership count, and active membership count. It never returns a member
+  roster or government ID.
+- `PATCH /platform/chamas/{chama_id}/status` records audited lifecycle
+  transitions with an optional reason.
+- `GET /platform/users?search=` searches existing accounts by email, linked
+  phone, or government ID. Results never reveal government IDs.
+- `POST /platform/users/{user_id}/require-password-change` sets the security
+  reset flag. `POST .../deactivate` and `POST .../reactivate` lock or restore
+  login without deleting financial history. Each action is audited.
+- `GET /platform/admins`, `POST /platform/admins`, and
+  `DELETE /platform/admins/{user_id}` manage only the global
+  `PLATFORM_ADMIN` role.
+
+The current system does not yet have subscription plans, invoices, or
+subscription-payment records.
 
 ## Collection analytics
 

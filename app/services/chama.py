@@ -34,12 +34,17 @@ class ChamaService:
         self.audit = AuditService(db)
 
     def create_chama(self, *, user: User, data: ChamaCreate) -> Chama:
-        already_owns_chama = self.db.scalar(
-            select(Chama.id).where(Chama.created_by_user_id == user.id).limit(1)
-        )
-        if already_owns_chama is not None:
-            raise ConflictError("An account can create only one Chama")
         if user.member_id is not None:
+            existing_membership = self.db.scalar(
+                select(Membership.id)
+                .where(Membership.member_id == user.member_id)
+                .limit(1)
+            )
+            if existing_membership is not None:
+                raise ConflictError(
+                    "This phone-number identity is already a member of a Chama. "
+                    "Create a separate account with a different phone number to create another Chama."
+                )
             member = self.members.get_by_id(user.member_id)
             if member is None:
                 raise StateError("The account's linked member record could not be found")

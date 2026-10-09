@@ -82,6 +82,9 @@ class AuditAction:
     PLATFORM_CHAMA_STATUS_CHANGE = "platform.chama_status_change"
     PLATFORM_ADMIN_GRANTED = "platform.admin_granted"
     PLATFORM_ADMIN_REVOKED = "platform.admin_revoked"
+    PLATFORM_USER_PASSWORD_CHANGE_REQUIRED = "platform.user_password_change_required"
+    PLATFORM_USER_DEACTIVATED = "platform.user_deactivated"
+    PLATFORM_USER_REACTIVATED = "platform.user_reactivated"
 
 
 class AuditService:

@@ -53,9 +53,15 @@ at the database with `UNIQUE (users.member_id)` and in the linking service
 This prevents two separate accounts from acting as the same person and
 inheriting the same Chama leadership permissions.
 
-## Addendum 2026-10-04: One Chama per creator
+## Addendum 2026-10-08: Founding eligibility for registered members
 
-An account with `users.member_id` already set cannot create another Chama.
-The backend returns `409 Conflict`; the frontend hides create controls for
-linked accounts. Existing members join another Chama when its executive
-registers them.
+A newly registered account is linked to a Member before it owns a Chama. It
+may therefore create its first Chama while that Member has no Memberships.
+Once the linked Member belongs to any Chama, the backend rejects creation with
+`409 Conflict`, irrespective of a different `member` object supplied by the
+client. The frontend hides creation controls for that account.
+
+A person who wants to found another Chama must use a separate account with a
+phone number and government ID that are both unregistered, as required by
+ADR-007. Existing members join other Chamas through executive membership
+registration.

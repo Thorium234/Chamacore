@@ -16,6 +16,7 @@ class UserOut(BaseModel):
     is_active: bool
     must_change_password: bool = False
     member_id: uuid.UUID | None
+    can_create_chama: bool
     created_at: datetime
 
 

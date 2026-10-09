@@ -69,6 +69,10 @@ def _make_app(*, debug: bool) -> FastAPI:
             response = await call_next(request)
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
             response.headers.setdefault("Referrer-Policy", "no-referrer")
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            response.headers.setdefault(
+                "Permissions-Policy", "camera=(), geolocation=(), microphone=()"
+            )
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
             )
@@ -96,7 +100,14 @@ def _make_app(*, debug: bool) -> FastAPI:
 
     @app.middleware("http")
     async def request_context_middleware(request: Request, call_next):
-        request_id = request.headers.get(REQUEST_ID_HEADER) or uuid.uuid4().hex
+        supplied_request_id = request.headers.get(REQUEST_ID_HEADER)
+        # Request IDs are correlation metadata, never identity. Bound the
+        # client-controlled value before it reaches structured logs/audit rows.
+        request_id = (
+            supplied_request_id
+            if supplied_request_id and len(supplied_request_id) <= 64
+            else uuid.uuid4().hex
+        )
         token = set_request_id(request_id)
         started = time.monotonic()
         try:

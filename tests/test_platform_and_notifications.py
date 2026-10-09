@@ -16,7 +16,7 @@ from tests.conftest import add_membership, create_chama, register_and_login
 
 def _make_admin(client, db, email="admin@e.com") -> str:
     """Register a user and grant the global PLATFORM_ADMIN role directly."""
-    client.post("/api/v1/auth/register", json={"email": email, "password": "secret123"})
+    register_and_login(client, email, password="StrongPassword1!")
     user = db.scalar(select(User).where(User.email == email))
     assert user is not None
     db.add(
@@ -31,7 +31,10 @@ def _make_admin(client, db, email="admin@e.com") -> str:
 
 
 def _admin_headers(client, email="admin@e.com") -> dict:
-    r = client.post("/api/v1/auth/token", data={"username": email, "password": "secret123"})
+    r = client.post(
+        "/api/v1/auth/token",
+        data={"username": email, "password": "StrongPassword1!"},
+    )
     assert r.status_code == 200, r.json()
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
@@ -314,9 +317,55 @@ class TestPlatformStats:
         assert r.status_code == 200, r.json()
         body = r.json()
         assert body["total_chamas"] == 1
-        assert body["active_chamas"] == 1
+        assert body["pending_chamas"] == 1
         assert body["platform_admins"] == 1
         assert body["total_users"] >= 2
+        assert body["total_members"] >= 1
+
+
+class TestPlatformUserOperations:
+    def test_admin_can_search_by_phone_and_force_password_change(self, client, db):
+        _make_admin(client, db)
+        admin = _admin_headers(client)
+        target_headers = register_and_login(client, "lookup@e.com")
+        target = db.scalar(select(User).where(User.email == "lookup@e.com"))
+        assert target is not None and target.member is not None
+
+        found = client.get(
+            f"/api/v1/platform/users?search={target.member.phone_number}",
+            headers=admin,
+        )
+        assert found.status_code == 200, found.json()
+        assert [item["id"] for item in found.json()] == [str(target.id)]
+        assert "government_id" not in found.json()[0]
+
+        forced = client.post(
+            f"/api/v1/platform/users/{target.id}/require-password-change",
+            headers=admin,
+        )
+        assert forced.status_code == 200, forced.json()
+        assert forced.json()["must_change_password"] is True
+        assert client.get("/api/v1/auth/me", headers=target_headers).status_code == 200
+
+    def test_admin_can_deactivate_and_reactivate_login(self, client, db):
+        _make_admin(client, db)
+        admin = _admin_headers(client)
+        target_headers = register_and_login(client, "lock@e.com")
+        target = db.scalar(select(User).where(User.email == "lock@e.com"))
+        assert target is not None
+
+        locked = client.post(
+            f"/api/v1/platform/users/{target.id}/deactivate", headers=admin
+        )
+        assert locked.status_code == 200, locked.json()
+        assert locked.json()["is_active"] is False
+        assert client.get("/api/v1/auth/me", headers=target_headers).status_code == 401
+
+        unlocked = client.post(
+            f"/api/v1/platform/users/{target.id}/reactivate", headers=admin
+        )
+        assert unlocked.status_code == 200, unlocked.json()
+        assert unlocked.json()["is_active"] is True
 
 
 class TestPlatformChamaFilters:

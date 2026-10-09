@@ -20,6 +20,9 @@ class PlatformChamaOut(BaseModel):
     created_by_user_id: uuid.UUID
     owner_name: str | None
     owner_email: EmailStr
+    owner_phone: str | None
+    membership_count: int
+    active_member_count: int
     created_at: datetime
     updated_at: datetime
 
@@ -39,6 +42,10 @@ class PlatformUserOut(BaseModel):
     id: uuid.UUID
     email: str
     is_active: bool
+    must_change_password: bool
+    member_id: uuid.UUID | None
+    member_name: str | None = None
+    member_phone: str | None = None
     platform_roles: list[RoleName] = []
     created_at: datetime
 
@@ -53,4 +60,6 @@ class PlatformStatsOut(BaseModel):
     pending_chamas: int
     suspended_chamas: int
     dissolved_chamas: int
+    total_users: int
+    total_members: int
     platform_admins: int

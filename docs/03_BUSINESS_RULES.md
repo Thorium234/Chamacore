@@ -54,11 +54,24 @@ Only rules marked `APPROVED` may be implemented.
 ### Chama access (ADR-008)
 
 - The creator of a Chama is automatically added as a member with `CHAIRPERSON` role.
-- A linked user (`users.member_id` set) cannot create another Chama. An
-  unlinked user may create one Chama; the member is created from the body and
-  linked to the account. Existing members join another Chama through executive
-  membership registration.
+- A user whose linked Member already has any Chama membership cannot create a
+  Chama with that account. The API enforces this rule even if a client sends
+  different member details. A newly registered account whose Member has no
+  membership may create its first Chama using that identity.
+- To found another Chama, the person must register a separate account with a
+  phone number and government ID that are not already registered (ADR-007).
+  Existing members join Chamas through executive membership registration.
 - Authorization requires an active membership in the Chama.
+
+### Platform administration
+
+- Platform administrators operate ChamaCore tenants and accounts, separately
+  from Chama financial roles. They may search accounts, lock and restore login,
+  require a password change, manage the global platform-admin role, and change
+  Chama lifecycle status.
+- Platform administration never creates contributions, shares, loans, payouts,
+  or ledger entries for a Chama. A global platform role alone does not grant
+  access to a Chama's financial records.
 
 ### Registration fees (ADR-003)
 

@@ -57,7 +57,7 @@ class AuthService:
         elif self.users.get_by_member_id(existing_member.id) is not None:
             raise ConflictError("This member identity is already linked to another account")
 
-        validate_password(password, email=email)
+        validate_password(password, email=email, phone=member.phone_number)
         if existing_member is None:
             existing_member = self.members.create(member)
         user = self.users.create(email=email, password_hash=hash_password(password))
@@ -145,9 +145,16 @@ class AuthService:
         """
         if not verify_password(current_password, user.password_hash):
             raise StateError("The current password is incorrect")
-        validate_password(new_password, email=user.email)
+        validate_password(
+            new_password,
+            email=user.email,
+            phone=user.member.phone_number if user.member is not None else None,
+        )
         user.must_change_password = False
         user.password_hash = hash_password(new_password)
+        self.refresh_tokens.revoke_all_for_user(
+            user.id, revoked_at=datetime.now(timezone.utc)
+        )
         self.audit.record_commit(
             actor=user,
             chama_id=None,

@@ -73,7 +73,11 @@ def validate_password(password: str, *, email: str | None = None, phone: str | N
     if phone:
         phone_clean = re.sub(r"\D", "", phone)
         pw_clean = re.sub(r"\D", "", pw_lower)
-        if pw_clean and phone_clean and (pw_clean in phone_clean or phone_clean in pw_clean or pw_lower == phone.lower()):
+        # Compare a complete normalized phone value only. Substring matching
+        # incorrectly rejects every strong password that merely contains a digit.
+        if pw_clean and phone_clean and (
+            pw_clean == phone_clean or pw_lower == phone.lower()
+        ):
             violations.append("Password must not be the same as your phone number")
 
     if violations:

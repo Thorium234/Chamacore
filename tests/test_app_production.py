@@ -35,6 +35,8 @@ def test_production_sends_security_headers():
         assert r.status_code == 200
         assert r.headers["X-Content-Type-Options"] == "nosniff"
         assert r.headers["Referrer-Policy"] == "no-referrer"
+        assert r.headers["X-Frame-Options"] == "DENY"
+        assert r.headers["Permissions-Policy"] == "camera=(), geolocation=(), microphone=()"
         assert r.headers["Strict-Transport-Security"] == "max-age=63072000; includeSubDomains"
 
 

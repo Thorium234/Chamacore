@@ -72,6 +72,50 @@ def list_platform_admins(
     return PlatformService(db).list_admins(actor=actor)
 
 
+@router.get("/users", response_model=list[PlatformUserOut])
+def search_platform_users(
+    search: str = Query(min_length=1, max_length=255),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    return PlatformService(db).search_users(
+        actor=actor, search=search, limit=limit, offset=offset
+    )
+
+
+@router.post("/users/{user_id}/require-password-change", response_model=PlatformUserOut)
+def require_platform_user_password_change(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    return PlatformService(db).require_password_change(actor=actor, user_id=user_id)
+
+
+@router.post("/users/{user_id}/deactivate", response_model=PlatformUserOut)
+def deactivate_platform_user(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    return PlatformService(db).set_user_active(
+        actor=actor, user_id=user_id, is_active=False
+    )
+
+
+@router.post("/users/{user_id}/reactivate", response_model=PlatformUserOut)
+def reactivate_platform_user(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+):
+    return PlatformService(db).set_user_active(
+        actor=actor, user_id=user_id, is_active=True
+    )
+
+
 @router.post("/admins", response_model=PlatformUserOut, status_code=201)
 def grant_platform_admin(
     data: PlatformAdminGrantRequest,

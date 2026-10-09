@@ -30,83 +30,80 @@ class TestCreateChama:
 
 
 class TestCreateChamaForLinkedUser:
-    """A user already linked to a member keeps using that member (ADR-008)."""
+    """Founding is unavailable once the identity has a Chama membership."""
 
-    def _first_chama(self, client, headers):
-        return create_chama(client, headers)
-
-    def test_second_chama_reattaches_linked_member(self, client):
-        headers = register_and_login(client, "linked@example.com")
-        first = self._first_chama(client, headers)
-        me = client.get("/api/v1/auth/me", headers=headers).json()
-        assert me["member_id"] is not None
-
-        r = client.post(
-            "/api/v1/chamas",
-            headers=headers,
+    @staticmethod
+    def _register_with_identity(client, *, email: str, phone: str, government_id: str):
+        response = client.post(
+            "/api/v1/auth/register",
             json={
-                "name": "Second Chama",
-                "registration_fee_amount": "200.00",
+                "email": email,
+                "password": "StrongPassword1!",
                 "member": {
-                    "first_name": "Different",
-                    "last_name": "Identity",
-                    "phone_number": "+254700000777",
-                    "government_id": "GID-777",
+                    "first_name": "Alice",
+                    "last_name": "Wanjiku",
+                    "phone_number": phone,
+                    "government_id": government_id,
                 },
             },
         )
-        assert r.status_code == 201, r.json()
-        second = r.json()
-        assert second["id"] != first["id"]
+        assert response.status_code == 201, response.json()
+        login = client.post(
+            "/api/v1/auth/token",
+            data={"username": phone, "password": "StrongPassword1!"},
+        )
+        assert login.status_code == 200, login.json()
+        return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
-        me_after = client.get("/api/v1/auth/me", headers=headers).json()
-        assert me_after["member_id"] == me["member_id"]
+    def test_registered_identity_can_found_its_first_chama(self, client):
+        headers = self._register_with_identity(
+            client,
+            email="founder@example.com",
+            phone="+254700000701",
+            government_id="GID-701",
+        )
+        me = client.get("/api/v1/auth/me", headers=headers).json()
+        assert me["member_id"] is not None
+        assert me["can_create_chama"] is True
 
-    def test_creator_can_access_new_chama_immediately(self, client):
-        headers = register_and_login(client, "linked2@example.com")
-        self._first_chama(client, headers)
         r = client.post(
             "/api/v1/chamas",
             headers=headers,
-            json={"name": "Second Chama", "member": None},
+            json={"name": "Founders Chama", "registration_fee_amount": "200.00"},
         )
         assert r.status_code == 201, r.json()
-        second_id = r.json()["id"]
+        me_after = client.get("/api/v1/auth/me", headers=headers).json()
+        assert me_after["member_id"] == me["member_id"]
+        assert me_after["can_create_chama"] is False
 
-        g = client.get(f"/api/v1/chamas/{second_id}", headers=headers)
-        assert g.status_code == 200, g.json()
-
-        memberships = client.get(
-            f"/api/v1/chamas/{second_id}/memberships", headers=headers
-        ).json()
-        assert len(memberships) == 1
-        me = client.get("/api/v1/auth/me", headers=headers).json()
-        assert memberships[0]["member_id"] == me["member_id"]
-        assert set(memberships[0]["roles"]) == {"CHAIRPERSON", "MEMBER"}
-
-    def test_mismatched_identity_payload_is_ignored(self, client):
-        headers = register_and_login(client, "linked3@example.com")
-        self._first_chama(client, headers)
-        me = client.get("/api/v1/auth/me", headers=headers).json()
+    def test_member_cannot_bypass_rule_with_different_identity_payload(self, client):
+        headers = self._register_with_identity(
+            client,
+            email="member@example.com",
+            phone="+254700000702",
+            government_id="GID-702",
+        )
+        first = client.post(
+            "/api/v1/chamas",
+            headers=headers,
+            json={"name": "First Chama"},
+        )
+        assert first.status_code == 201, first.json()
         r = client.post(
             "/api/v1/chamas",
             headers=headers,
             json={
-                "name": "Second Chama",
+                "name": "Blocked Second Chama",
                 "member": {
                     "first_name": "Bogus",
                     "last_name": "Identity",
-                    "phone_number": "+254700000888",
-                    "government_id": "GID-888",
+                    "phone_number": "+254700000703",
+                    "government_id": "GID-703",
                 },
             },
         )
-        assert r.status_code == 201, r.json()
-        memberships = client.get(
-            f"/api/v1/chamas/{r.json()['id']}/memberships", headers=headers
-        ).json()
-        assert len(memberships) == 1
-        assert memberships[0]["member_id"] == me["member_id"]
+        assert r.status_code == 409, r.json()
+        assert "already a member" in r.json()["detail"]["message"].lower()
 
 
 class TestListChamas:
@@ -117,11 +114,12 @@ class TestListChamas:
             "/api/v1/chamas",
             headers=headers,
             json={"name": "Second Chama"},
-        ).json()
+        )
+        assert second.status_code == 409, second.json()
         r = client.get("/api/v1/chamas", headers=headers)
         assert r.status_code == 200
         ids = {item["id"] for item in r.json()}
-        assert ids == {first["id"], second["id"]}
+        assert ids == {first["id"]}
 
     def test_unlinked_user_gets_empty_list(self, client):
         headers = register_and_login(client, "fresh@example.com")
