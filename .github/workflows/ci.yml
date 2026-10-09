@@ -57,7 +57,7 @@ jobs:
 
   concurrency-postgres:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     services:
       postgres:
         image: postgres:16
@@ -85,4 +85,4 @@ jobs:
       - name: Run Alembic migration
         run: alembic upgrade head
       - name: Run concurrency tests (PostgreSQL)
-        run: pytest -q -m "concurrency"
+        run: pytest -vv -s -m "concurrency"
