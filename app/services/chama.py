@@ -35,16 +35,6 @@ class ChamaService:
 
     def create_chama(self, *, user: User, data: ChamaCreate) -> Chama:
         if user.member_id is not None:
-            existing_membership = self.db.scalar(
-                select(Membership.id)
-                .where(Membership.member_id == user.member_id)
-                .limit(1)
-            )
-            if existing_membership is not None:
-                raise ConflictError(
-                    "This phone-number identity is already a member of a Chama. "
-                    "Create a separate account with a different phone number to create another Chama."
-                )
             member = self.members.get_by_id(user.member_id)
             if member is None:
                 raise StateError("The account's linked member record could not be found")

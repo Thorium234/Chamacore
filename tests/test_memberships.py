@@ -1,7 +1,11 @@
 """Membership API tests."""
 
+import uuid
+
 import pytest
 
+from app.models.enums import ChamaStatus
+from app.models.chama import Chama
 from tests.conftest import register_and_login, create_chama, add_membership
 
 
@@ -38,15 +42,52 @@ class TestCreateMembership:
             json={"member": {"first_name": "S", "last_name": "A", "phone_number": "+254700000055", "government_id": "GID-55"}},
         )
         assert r.status_code == 201
-        # register a new user and add them to both chamas
-        headers2 = register_and_login(client, "multi@e.com", "password123")
-        # add user to chama_b
-        r = client.post(
-            f"/api/v1/chamas/{chama_b['id']}/memberships",
-            headers=headers_b,
-            json={"member": {"first_name": "M", "last_name": "B", "phone_number": "+254700000066", "government_id": "GID-66"}},
+
+    def test_existing_member_details_create_membership_without_duplicate_identity(self, client, db):
+        chair_a = register_and_login(client, "reuse-a@e.com")
+        chama_a = create_chama(client, chair_a, name="Reuse A")
+        db.get(Chama, uuid.UUID(chama_a["id"])).status = ChamaStatus.ACTIVE
+        db.commit()
+        shared = add_membership(
+            client,
+            chair_a,
+            chama_a["id"],
+            phone="+254700000901",
+            govt="GID-901",
         )
-        assert r.status_code == 201
+        chair_b = register_and_login(client, "reuse-b@e.com")
+        chama_b = create_chama(client, chair_b, name="Reuse B")
+        db.get(Chama, uuid.UUID(chama_b["id"])).status = ChamaStatus.ACTIVE
+        db.commit()
+        response = client.post(
+            f"/api/v1/chamas/{chama_b['id']}/memberships",
+            headers=chair_b,
+            json={
+                "member": {
+                    "first_name": "Bob",
+                    "last_name": "Otieno",
+                    "phone_number": "+254700000901",
+                    "government_id": "GID-901",
+                    "email": "ignored-existing-member@example.com",
+                }
+            },
+        )
+        assert response.status_code == 201, response.json()
+        assert response.json()["member_id"] == shared["member_id"]
+        duplicate = client.post(
+            f"/api/v1/chamas/{chama_b['id']}/memberships",
+            headers=chair_b,
+            json={
+                "member": {
+                    "first_name": "Bob",
+                    "last_name": "Otieno",
+                    "phone_number": "+254700000901",
+                    "government_id": "GID-901",
+                    "email": "ignored-existing-member@example.com",
+                }
+            },
+        )
+        assert duplicate.status_code == 409, duplicate.json()
 
     def test_leadership_required_to_add_member(self, client):
         headers_chair = register_and_login(client, "chair@e.com")

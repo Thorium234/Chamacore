@@ -28,15 +28,5 @@ class User(Base, UUIDMixin, TimestampMixin):
 
     member: Mapped["Member | None"] = relationship(lazy="joined")
 
-    @property
-    def can_create_chama(self) -> bool:
-        """Whether this identity has never been enrolled in a Chama.
-
-        Creation is reserved for an account whose member identity has no
-        existing membership. This prevents a Chama member from creating a new
-        group under the same registered phone-number identity.
-        """
-        return self.member is None or not self.member.memberships
-
     def __repr__(self) -> str:
         return f"<User email={self.email!r}>"

@@ -54,13 +54,15 @@ Only rules marked `APPROVED` may be implemented.
 ### Chama access (ADR-008)
 
 - The creator of a Chama is automatically added as a member with `CHAIRPERSON` role.
-- A user whose linked Member already has any Chama membership cannot create a
-  Chama with that account. The API enforces this rule even if a client sends
-  different member details. A newly registered account whose Member has no
-  membership may create its first Chama using that identity.
-- To found another Chama, the person must register a separate account with a
-  phone number and government ID that are not already registered (ADR-007).
-  Existing members join Chamas through executive membership registration.
+- A linked user may create any number of Chamas. Each creation reuses the
+  linked Member and creates a distinct chairperson Membership in the new Chama.
+- Phone number and government ID remain globally unique on Member. A person
+  therefore has one Member identity across all their Chamas; additional
+  memberships do not duplicate that identity.
+- When an executive adds member details, an existing Member with the same
+  phone number and government ID is reused. A conflict occurs only if that
+  Member already belongs to the target Chama, or either identity field matches
+  a different person.
 - Authorization requires an active membership in the Chama.
 
 ### Platform administration

@@ -10,7 +10,7 @@ deployment configuration. This source audit does not replace live testing.
 
 | Priority | Finding | Risk | Change made |
 | --- | --- | --- | --- |
-| High | A linked member could create another Chama because creation checked ownership instead of membership. | The same identity could found another group. | Creation returns 409 whenever the linked Member has any Membership. The API exposes can_create_chama, and the UI hides or rejects creation. |
+| High | Chama founding policy could split one person into several identities. | Requiring another phone/account would fragment a person's memberships and financial history. | A linked Member may now found multiple Chamas through separate Membership rows; phone number and government ID remain globally unique. |
 | High | Password changes did not revoke refresh tokens. | A stolen refresh token could continue a session after password reset. | Password changes now revoke all refresh tokens in the same committed operation. |
 | Medium | Password checks did not compare member phone numbers. | A predictable phone-derived password could be accepted. | Registration and password change now validate against the canonical phone number. |
 | Medium | Client request IDs were unbounded. | Log and audit pollution or storage errors. | Values over 64 characters are replaced with a server-generated ID. |
@@ -42,19 +42,14 @@ deployment configuration. This source audit does not replace live testing.
 
 ## Identity and Chama-founding rule
 
-A registered user may found their first Chama while their linked Member has no
-Membership. Once that person is added to or founds any Chama, the same account
-and identity cannot create another Chama. Sending another phone number in the
-request does not bypass the server check.
-
-The alternative is a separate account using an unregistered phone number and
-an unregistered government ID. Both values are globally unique under ADR-007,
-so a different phone alone is intentionally insufficient.
+A linked user may found multiple Chamas with the same Member identity. Each
+Chama receives a separate Membership, while phone number and government ID
+remain globally unique to prevent duplicate identities for one person.
 
 ## Verification checklist
 
-1. Deploy backend and frontend together because UserOut now includes can_create_chama.
-2. Confirm a registered identity can create its first Chama.
-3. Confirm the same account receives 409 on a second request, even with a different member payload.
-4. Confirm profile and onboarding hide creation after membership.
+1. Confirm a registered identity can create multiple Chamas with the same Member.
+2. Confirm the same Member can be added to a second Chama using matching phone and government ID.
+3. Confirm adding that Member twice to the same Chama returns 409.
+4. Confirm profile and onboarding continue to show creation for normal members.
 5. Set production secrets, PostgreSQL, HTTPS, and edge request limits before handling live funds.

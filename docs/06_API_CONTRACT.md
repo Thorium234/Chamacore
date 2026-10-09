@@ -155,24 +155,19 @@ readable, but all Chama-scoped mutations are blocked until a `PLATFORM_ADMIN`
 activates it. Suspended Chamas also remain read-only; only platform admins can
 change lifecycle status.
 
-Chama creation is available only while the authenticated user's linked Member
-has no existing Membership (ADR-008):
+Chama creation is available to authenticated non-platform-admin users. The
+creator's Member identity is reconciled with their account (ADR-008):
 
 - If the user is **not yet linked** (`users.member_id` is NULL): a member is
   created from the request body and linked to the user.
-- If the user is **already linked but has no Chama membership**: the existing
-  member becomes the creator's initial chairperson membership; no duplicate
-  Member record is created.
-- If the linked Member already has a Membership in any Chama: creation returns
-  `409 Conflict`, regardless of `member` values in the request. Founding a
-  different Chama requires a separate account with a unique phone number and
-  government ID (ADR-007).
+- If the user is **already linked**: the existing Member becomes the creator's
+  initial chairperson membership in the new Chama. Existing memberships do not
+  restrict creation and no duplicate Member record is created.
 
 Body: `{"name": "...", "registration_fee_amount": "100.00", "member": {"first_name": "...", "last_name": "...", "phone_number": "...", "government_id": "..."}}`.
-The `member` field is required only for an unlinked user. Returns 400 if
-`member` is missing for an unlinked user, 409 if the account's linked Member
-already belongs to a Chama, or on duplicate phone or government ID when
-creating a new member.
+The `member` field is required only for an unlinked user. Returns 400 if it
+is missing for an unlinked user, or 409 on duplicate phone or government ID
+when creating a new Member.
 
 ### `GET /api/v1/chamas`
 

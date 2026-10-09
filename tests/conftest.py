@@ -161,7 +161,7 @@ def add_membership(client, headers, chama_id: str, *, phone: str = "+25470000009
     r = client.post(
         f"/api/v1/chamas/{chama_id}/memberships",
         headers=headers,
-        json={"member": {"first_name": first, "last_name": last, "phone_number": phone, "government_id": govt}},
+        json={"member": {"first_name": first, "last_name": last, "phone_number": phone, "government_id": govt, "email": f"member-{govt.lower()}@example.com"}},
     )
     assert r.status_code == 201, f"add_membership failed: {r.status_code} {r.json()}"
     return r.json()

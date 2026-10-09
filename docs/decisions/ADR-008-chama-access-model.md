@@ -26,9 +26,10 @@ already decided in ADR-006.
 
 ## Consequences
 
-- Chama creation requires member details in the request body.
-- A user may create one Chama only. A linked member joins additional Chamas
-  through membership registration by a Chama executive.
+- Chama creation requires member details in the request body only when the
+  account is not linked to a Member.
+- A linked Member may create or join many Chamas through separate Membership
+  rows. The Member identity is never duplicated to found another Chama.
 - Authorization is membership-based: no membership = no access.
 
 ## Addendum 2026-09-15: Identity claim endpoint
@@ -53,15 +54,13 @@ at the database with `UNIQUE (users.member_id)` and in the linking service
 This prevents two separate accounts from acting as the same person and
 inheriting the same Chama leadership permissions.
 
-## Addendum 2026-10-08: Founding eligibility for registered members
+## Addendum 2026-10-09: Multi-Chama founding
 
-A newly registered account is linked to a Member before it owns a Chama. It
-may therefore create its first Chama while that Member has no Memberships.
-Once the linked Member belongs to any Chama, the backend rejects creation with
-`409 Conflict`, irrespective of a different `member` object supplied by the
-client. The frontend hides creation controls for that account.
+A linked user may found another Chama using the same Member identity, even
+when that Member already has Memberships elsewhere. The backend creates a new
+chairperson Membership for the new Chama and ignores a duplicate member payload.
 
-A person who wants to found another Chama must use a separate account with a
-phone number and government ID that are both unregistered, as required by
-ADR-007. Existing members join other Chamas through executive membership
-registration.
+Member phone numbers and government IDs remain globally unique under ADR-007.
+The system therefore represents one person as one Member with many
+Memberships, rather than creating a second identity or requiring a second
+phone number to found another Chama.

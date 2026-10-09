@@ -17,8 +17,8 @@ Approved — 2026-10-04
 - `PLATFORM_ADMIN` sees aggregate platform overview data on the dashboard.
   Chama-scoped records still require an active membership and that membership's
   Chama role; the global platform role does not grant access to member records.
-- An account already linked to a member cannot create a second Chama. The
-  existing member joins other Chamas through executive membership registration.
+- A linked Member may create or join multiple Chamas. The global platform role
+  does not expand the financial scope of any individual Membership.
 
 ## Reason
 

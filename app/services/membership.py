@@ -115,10 +115,14 @@ class MembershipService:
             member = self.members.get_by_id(data.member_id)
             if member is None:
                 raise NotFoundError("Member not found")
-            if self.memberships.get_by_chama_and_member(chama_id, member.id) is not None:
-                raise ConflictError("This member already belongs to the Chama")
         else:
-            member = self._create_member(data.member)
+            member = self.members.find_by_identity(
+                data.member.phone_number, data.member.government_id
+            )
+            if member is None:
+                member = self._create_member(data.member)
+        if self.memberships.get_by_chama_and_member(chama_id, member.id) is not None:
+            raise ConflictError("This member already belongs to the Chama")
 
         number = self.memberships.allocate_membership_number(chama_id)
         membership = self.memberships.create(
