@@ -173,6 +173,44 @@ class AuthService:
         )
         return user
 
+    def delete_account(self, *, user: User, password: str) -> None:
+        """Deactivate account, revoke all sessions, and preserve financial history.
+
+        Preserves immutable financial history, ledger postings, contributions,
+        and audit records. Prevents future login and invalidates all active sessions.
+        """
+        if not verify_password(password, user.password_hash):
+            raise StateError("The password provided is incorrect")
+        from app.models.enums import RoleName
+        from app.models.user_platform_role import UserPlatformRole
+        is_admin = self.db.query(UserPlatformRole).filter(
+            UserPlatformRole.user_id == user.id,
+            UserPlatformRole.role == RoleName.PLATFORM_ADMIN,
+        ).first() is not None
+        if is_admin:
+            active_admin_ids = [
+                admin_id
+                for (admin_id,) in self.db.query(UserPlatformRole.user_id)
+                .filter(UserPlatformRole.role == RoleName.PLATFORM_ADMIN)
+                .all()
+                if (admin := self.users.get_by_id(admin_id)) is not None and admin.is_active
+            ]
+            if active_admin_ids == [user.id]:
+                raise StateError("The last active PLATFORM_ADMIN cannot delete their account")
+
+        user.is_active = False
+        self.refresh_tokens.revoke_all_for_user(
+            user.id, revoked_at=datetime.now(timezone.utc)
+        )
+        self.db.commit()
+        self.audit.record_commit(
+            actor=user,
+            chama_id=None,
+            action=AuditAction.AUTH_ACCOUNT_DELETE,
+            resource_type="user",
+            resource_id=user.id,
+        )
+
     def require_password_change(self, *, user: User, reason: str | None = None) -> User:
         """Force the user to change their password at next login."""
         if not user.must_change_password:

@@ -16,6 +16,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import (
     ChangePasswordRequest,
+    DeleteAccountRequest,
     LogoutRequest,
     MemberLinkRequest,
     RefreshRequest,
@@ -135,6 +136,22 @@ def change_password(
             current_password=data.current_password,
             new_password=data.new_password,
         )
+    except StateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message
+        )
+
+
+@router.post("/delete-account", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(
+    data: DeleteAccountRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+    _rate_limit: None = Depends(check_token_rate_limit),
+) -> Response:
+    try:
+        AuthService(db).delete_account(user=actor, password=data.password)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except StateError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message

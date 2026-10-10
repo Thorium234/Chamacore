@@ -78,6 +78,7 @@ class AuditAction:
     # Authentication (continued)
     AUTH_PASSWORD_CHANGE = "auth.password_change"
     AUTH_PASSWORD_CHANGE_REQUIRED = "auth.password_change_required"
+    AUTH_ACCOUNT_DELETE = "auth.account_delete"
     # Platform administration
     PLATFORM_CHAMA_STATUS_CHANGE = "platform.chama_status_change"
     PLATFORM_ADMIN_GRANTED = "platform.admin_granted"

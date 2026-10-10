@@ -34,6 +34,7 @@ PASSWORD_CHANGE_EXEMPT_PATHS = {
     "/auth/change-password",
     "/auth/logout",
     "/auth/me",
+    "/auth/delete-account",
 }
 
 

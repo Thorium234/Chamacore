@@ -143,7 +143,9 @@ class TestLedgerSourceConcurrency:
         user = User(email="ledger@e.com", password_hash=hash_password("x"))
         seed.add(user)
         seed.flush()
-        chama = Chama(name="Ledger C", created_by_user_id=user.id, registration_fee_amount=0)
+        from app.models.enums import ChamaStatus
+
+        chama = Chama(name="Ledger C", created_by_user_id=user.id, registration_fee_amount=0, status=ChamaStatus.ACTIVE)
         seed.add(chama)
         seed.flush()
         member = Member(
