@@ -86,3 +86,17 @@ jobs:
         run: alembic upgrade head
       - name: Run concurrency tests (PostgreSQL)
         run: pytest -vv -s -m "concurrency"
+
+  deploy-azure:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test-sqlite, test-postgres, concurrency-postgres]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy FastAPI to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: .

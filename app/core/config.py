@@ -2,9 +2,46 @@ from base64 import b64encode
 from decimal import Decimal
 from functools import lru_cache
 from hashlib import sha256
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def normalize_database_url(url: str) -> str:
+    """Make a DATABASE_URL usable by the sync SQLAlchemy engine and Alembic.
+
+    Azure App Settings often paste ``postgresql+asyncpg://`` (async only) and
+    passwords that contain ``@`` or ``/`` without percent-encoding. Both break
+    ``alembic upgrade head`` against Azure Database for PostgreSQL.
+    """
+    raw = (url or "").strip()
+    if not raw or raw.startswith("sqlite"):
+        return raw
+
+    scheme, separator, remainder = raw.partition("://")
+    if not separator:
+        return raw
+
+    if scheme in {"postgresql+asyncpg", "postgresql"}:
+        scheme = "postgresql+psycopg"
+
+    if remainder and "@" in remainder:
+        userinfo, hostpart = remainder.rsplit("@", 1)
+        if ":" in userinfo:
+            username, password = userinfo.split(":", 1)
+            password = quote(unquote(password), safe="")
+            remainder = f"{username}:{password}@{hostpart}"
+
+    normalized = f"{scheme}://{remainder}"
+    parsed = urlparse(normalized)
+    host = (parsed.hostname or "").lower()
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    if "postgres.database.azure.com" in host and "sslmode" not in {k.lower() for k in query}:
+        query["sslmode"] = "require"
+        parsed = parsed._replace(query=urlencode(query))
+        normalized = urlunparse(parsed)
+    return normalized
 
 # Deterministic, clearly-labelled development-only credential master key. It
 # is derived from a constant so local tests are reproducible. Production
@@ -25,7 +62,13 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
 
     # SQLite is used for development, PostgreSQL for production.
+    # Production must use a sync driver (postgresql+psycopg), not asyncpg.
     database_url: str = "sqlite:///./chamacore.db"
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, value: str) -> str:
+        return normalize_database_url(value)
 
     # JWT signing. The default secret is for local development only and
     # MUST be overridden in any deployed environment. Access tokens have a
