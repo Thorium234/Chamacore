@@ -207,3 +207,4 @@ Accepted decisions are in `docs/decisions/`.
 If a business rule is missing, contradictory, or marked `OPEN`, do not guess.
 Record the issue in `docs/decisions/OPEN_QUESTIONS.md` and stop the blocked
 implementation.
+production vercel link `https://chamacore-frontend.vercel.app`
